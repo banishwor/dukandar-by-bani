@@ -8,6 +8,7 @@ import { runGoogleBackupTestSuite } from '../services/googleBackupTestService';
 import { runBackupTestSuite } from '../services/backupTestService';
 import { runGoogleBackupUploadTestSuite } from '../services/googleBackupUploadTestService';
 import { runGoogleBackupDiscoveryTestSuite } from '../services/googleBackupDiscoveryTestService';
+import { runGoogleBackupRestorePreviewTestSuite } from '../services/googleBackupRestorePreviewTestService';
 import { businessRepository } from '../repositories/businessRepository';
 
 async function main() {
@@ -127,6 +128,18 @@ async function main() {
     else failedCount++;
   }
 
+  console.log('\n--- SECTION 9: PHASE 7C-2 GOOGLE BACKUP RESTORE PREVIEW TESTS (1 - 20) ---');
+  const previewResults = await runGoogleBackupRestorePreviewTestSuite();
+
+  for (const r of previewResults) {
+    const status = r.passed ? '✓ PASS' : '✗ FAIL';
+    console.log(`[${status}] ${r.name} (${r.durationMs}ms)`);
+    console.log(`  Message: ${r.message}`);
+    console.log('');
+    if (r.passed) passedCount++;
+    else failedCount++;
+  }
+
   const totalScenarios =
     integrityResults.length +
     reconResults.length +
@@ -135,7 +148,8 @@ async function main() {
     googleResults.length +
     backupResults.length +
     uploadResults.length +
-    discoveryResults.length;
+    discoveryResults.length +
+    previewResults.length;
 
   console.log('================================================================');
   console.log(`GRAND SUMMARY: ${passedCount} PASSED, ${failedCount} FAILED (TOTAL: ${totalScenarios} TESTS)`);
@@ -147,6 +161,7 @@ async function main() {
   console.log(`  - Section 6 (Backup Snapshot):    ${backupResults.filter((r) => r.passed).length}/${backupResults.length} Passed`);
   console.log(`  - Section 7 (Backup Upload):      ${uploadResults.filter((r) => r.passed).length}/${uploadResults.length} Passed`);
   console.log(`  - Section 8 (Backup Discovery):   ${discoveryResults.filter((r) => r.passed).length}/${discoveryResults.length} Passed`);
+  console.log(`  - Section 9 (Restore Preview):    ${previewResults.filter((r) => r.passed).length}/${previewResults.length} Passed`);
   console.log('================================================================');
 
   if (failedCount > 0) {

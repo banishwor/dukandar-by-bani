@@ -4,6 +4,7 @@ import { useToast } from '../../components/ui/Toast';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { googleBackupDiscoveryService } from '../../services/google/googleBackupDiscoveryService';
+import { RestorePreviewModal } from './RestorePreviewModal';
 import type { RemoteBackupSnapshot, RemoteBackupDiscoveryResult } from '../../types/remoteBackup';
 import {
   History,
@@ -18,6 +19,7 @@ import {
   Info,
   ChevronRight,
   ShieldCheck,
+  Eye,
 } from 'lucide-react';
 
 interface GoogleBackupHistoryProps {
@@ -37,6 +39,7 @@ export const GoogleBackupHistory: React.FC<GoogleBackupHistoryProps> = ({
   const [discovery, setDiscovery] = useState<RemoteBackupDiscoveryResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedDetails, setSelectedDetails] = useState<RemoteBackupSnapshot | null>(null);
+  const [previewBackupId, setPreviewBackupId] = useState<string | null>(null);
   const [showAllAttempts, setShowAllAttempts] = useState(false);
 
   const fetchBackups = useCallback(async () => {
@@ -209,6 +212,16 @@ export const GoogleBackupHistory: React.FC<GoogleBackupHistoryProps> = ({
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => setPreviewBackupId(backup.backupId)}
+                      className="text-xs text-blue-600 border-blue-200 hover:bg-blue-50 font-semibold"
+                    >
+                      <Eye className="w-3.5 h-3.5 mr-1" />
+                      Preview
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => setSelectedDetails(backup)}
                       className="text-xs text-slate-600 font-semibold"
                     >
@@ -261,8 +274,26 @@ export const GoogleBackupHistory: React.FC<GoogleBackupHistoryProps> = ({
               Restore candidate selected: <strong className="font-mono">{selectedCandidateId}</strong>
             </span>
           </div>
-          <span className="text-[11px] text-blue-700 italic">Ready for future restore preview</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPreviewBackupId(selectedCandidateId)}
+            className="text-xs text-blue-700 border-blue-300 hover:bg-blue-100"
+          >
+            <Eye className="w-3.5 h-3.5 mr-1" />
+            Preview Diff
+          </Button>
         </div>
+      )}
+
+      {/* Restore Preview Modal */}
+      {previewBackupId && business && (
+        <RestorePreviewModal
+          businessId={business.id}
+          backupId={previewBackupId}
+          isOpen={Boolean(previewBackupId)}
+          onClose={() => setPreviewBackupId(null)}
+        />
       )}
 
       {/* Detail Modal */}
