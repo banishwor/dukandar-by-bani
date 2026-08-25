@@ -15,6 +15,7 @@
 
 import { db } from '../db/database';
 import { googleSheetsTabParser } from './google/googleSheetsTabParser';
+import { googleSheetsMapper } from './google/googleSheetsMapper';
 import { snapshotComparatorService } from './backup/snapshotComparatorService';
 import { backupSnapshotService } from './backup/backupSnapshotService';
 import { businessRepository } from '../repositories/businessRepository';
@@ -233,19 +234,64 @@ export const runGoogleBackupRestorePreviewTestSuite = async (): Promise<RestoreP
     };
   });
 
-  // Test 8: Checksum matches valid reconstructed snapshot
-  await runTest('Preview Test 8: SHA-256 checksum computation matches canonical snapshot', async () => {
+  // Test 8: Checksum matches valid reconstructed snapshot after roundtrip mapper/parser
+  await runTest('Preview Test 8: SHA-256 checksum matches canonical snapshot after 31-tab roundtrip mapper/parser', async () => {
     const bId = await createBusiness('RT8');
+    const item = await itemRepository.createItem(bId, { name: 'Item RT8', type: 'PRODUCT', unit: 'pcs', sellingPrice: 200, openingStock: 5, trackInventory: true, isActive: true });
+    const cust = await customerRepository.createCustomer(bId, { name: 'Cust RT8', phone: '9988776655', isActive: true });
+
     const snap = await backupSnapshotService.createBackupSnapshot(bId);
+    const originalChecksum = snap.metadata.checksum;
 
-    const checksum1 = snap.metadata.checksum;
-    const checksum2 = await backupSnapshotService.calculateBackupChecksum(snap);
+    // Simulate Google Sheets 2D tabular roundtrip
+    const entityTabs = googleSheetsMapper.mapAllEntities(snap);
+    const rawTabsData: Record<string, any[][]> = {};
+    for (const t of entityTabs) {
+      rawTabsData[t.title] = [t.headers, ...t.rows];
+    }
 
-    const passed = checksum1 === checksum2 && checksum1.startsWith('sha256:');
+    const reconstructedSnap: any = {
+      metadata: { ...snap.metadata },
+      businesses: googleSheetsTabParser.parseBusinesses(rawTabsData['Businesses'] || []),
+      items: googleSheetsTabParser.parseItems(rawTabsData['Items'] || []),
+      customers: googleSheetsTabParser.parseCustomers(rawTabsData['Customers'] || []),
+      suppliers: googleSheetsTabParser.parseSuppliers(rawTabsData['Suppliers'] || []),
+      sales: googleSheetsTabParser.parseSales(rawTabsData['Sales'] || []),
+      saleLines: googleSheetsTabParser.parseSaleLines(rawTabsData['SaleLines'] || []),
+      saleReturns: googleSheetsTabParser.parseSaleReturns(rawTabsData['SaleReturns'] || []),
+      saleReturnLines: googleSheetsTabParser.parseSaleReturnLines(rawTabsData['SaleReturnLines'] || []),
+      saleVoids: googleSheetsTabParser.parseSaleVoids(rawTabsData['SaleVoids'] || []),
+      payments: googleSheetsTabParser.parsePayments(rawTabsData['Payments'] || []),
+      paymentAllocations: googleSheetsTabParser.parsePaymentAllocations(rawTabsData['PaymentAllocations'] || []),
+      paymentReversals: googleSheetsTabParser.parsePaymentReversals(rawTabsData['PaymentReversals'] || []),
+      refunds: googleSheetsTabParser.parseRefunds(rawTabsData['Refunds'] || []),
+      purchases: googleSheetsTabParser.parsePurchases(rawTabsData['Purchases'] || []),
+      purchaseLines: googleSheetsTabParser.parsePurchaseLines(rawTabsData['PurchaseLines'] || []),
+      purchaseReturns: googleSheetsTabParser.parsePurchaseReturns(rawTabsData['PurchaseReturns'] || []),
+      purchaseReturnLines: googleSheetsTabParser.parsePurchaseReturnLines(rawTabsData['PurchaseReturnLines'] || []),
+      purchaseVoids: googleSheetsTabParser.parsePurchaseVoids(rawTabsData['PurchaseVoids'] || []),
+      supplierPayments: googleSheetsTabParser.parseSupplierPayments(rawTabsData['SupplierPayments'] || []),
+      supplierPaymentAllocations: googleSheetsTabParser.parseSupplierPaymentAllocations(rawTabsData['SupplierPaymentAllocations'] || []),
+      supplierPaymentReversals: googleSheetsTabParser.parseSupplierPaymentReversals(rawTabsData['SupplierPaymentReversals'] || []),
+      refundsReceived: googleSheetsTabParser.parseRefundsReceived(rawTabsData['RefundsReceived'] || []),
+      stockMovements: googleSheetsTabParser.parseStockMovements(rawTabsData['StockMovements'] || []),
+      financialAccounts: googleSheetsTabParser.parseFinancialAccounts(rawTabsData['FinancialAccounts'] || []),
+      financialMovements: googleSheetsTabParser.parseFinancialMovements(rawTabsData['FinancialMovements'] || []),
+      expenseCategories: googleSheetsTabParser.parseExpenseCategories(rawTabsData['ExpenseCategories'] || []),
+      expenses: googleSheetsTabParser.parseExpenses(rawTabsData['Expenses'] || []),
+      expenseReversals: googleSheetsTabParser.parseExpenseReversals(rawTabsData['ExpenseReversals'] || []),
+      accountTransfers: googleSheetsTabParser.parseAccountTransfers(rawTabsData['AccountTransfers'] || []),
+      accountTransferReversals: googleSheetsTabParser.parseAccountTransferReversals(rawTabsData['AccountTransferReversals'] || []),
+      syncMetadata: googleSheetsTabParser.parseSyncMetadata(rawTabsData['SyncMetadata'] || []),
+    };
+
+    const recomputedChecksum = await backupSnapshotService.calculateBackupChecksum(reconstructedSnap);
+    const passed = originalChecksum === recomputedChecksum && originalChecksum.startsWith('sha256:');
+
     return {
       passed,
-      message: `SHA-256 digest (${checksum1.slice(0, 16)}...) matches canonical hash.`,
-      details: { checksum1, checksum2 },
+      message: `SHA-256 digest (${originalChecksum.slice(0, 16)}...) strictly preserved after 31-tab roundtrip serialization.`,
+      details: { originalChecksum, recomputedChecksum },
     };
   });
 

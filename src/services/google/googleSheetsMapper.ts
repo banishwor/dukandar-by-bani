@@ -168,7 +168,7 @@ export const googleSheetsMapper = {
   mapAllEntities(snapshot: BusinessBackupSnapshot): TabData[] {
     return [
       this.mapEntityCollection('Businesses', [
-        'id', 'name', 'currencyCode', 'currencySymbol', 'phone', 'email', 'address', 'taxId',
+        'id', 'businessId', 'name', 'currencyCode', 'currencySymbol', 'phone', 'email', 'address', 'taxId',
         'fiscalYearStart', 'createdAt', 'createdByDeviceId', 'updatedAt', 'updatedByDeviceId',
         'version', 'isDeleted',
       ], snapshot.businesses),
@@ -311,7 +311,7 @@ export const googleSheetsMapper = {
       ], snapshot.financialMovements),
 
       this.mapEntityCollection('ExpenseCategories', [
-        'id', 'businessId', 'name', 'color', 'isDefault', 'isArchived', 'createdAt', 'createdByDeviceId',
+        'id', 'businessId', 'name', 'icon', 'color', 'isDefault', 'isArchived', 'createdAt', 'createdByDeviceId',
         'updatedAt', 'updatedByDeviceId', 'version', 'isDeleted',
       ], snapshot.expenseCategories),
 

@@ -91,58 +91,55 @@ export class GoogleBackupDownloaderService {
 
     const spreadsheetId = discovery.spreadsheetId;
 
-    // Step 2: Read Control Metadata & Index
+    // Step 2 & 3: Atomic Batch Read of all 31 Entity Tabs + BackupIndex + BackupMeta in ONE batchGet call!
     notify({
-      stage: 'DOWNLOADING_METADATA',
-      completedTabs: 1,
+      stage: 'DOWNLOADING_ENTITIES',
+      completedTabs: 0,
       totalTabs: ENTITY_TABS.length + 2,
-      percentage: 10,
-      message: 'Reading BackupIndex and control metadata...',
+      percentage: 30,
+      message: 'Downloading all 31 entity collections and control tabs in an atomic batch...',
     });
 
-    const [metaRows, indexRows] = await Promise.all([
-      googleSheetsService.readSheetValues(accessToken, spreadsheetId, 'BackupMeta!A1:N'),
-      googleSheetsService.readSheetValues(accessToken, spreadsheetId, 'BackupIndex!A1:I'),
-    ]);
+    const rangesToFetch = [
+      'BackupMeta!A1:N',
+      'BackupIndex!A1:I',
+      ...ENTITY_TABS.map((tabTitle) => `${tabTitle}!A1:Z`),
+    ];
+
+    const batchResults = await googleSheetsService.batchGetValues(
+      accessToken,
+      spreadsheetId,
+      rangesToFetch
+    );
+
+    // Map results by tab name
+    const rawTabsData: Record<string, any[][]> = {};
+    let metaRows: any[][] = [];
+    let indexRows: any[][] = [];
+
+    for (const item of batchResults) {
+      // Range format from Google API: "'Businesses'!A1:Z100" or "Businesses!A1:Z100"
+      const tabMatch = item.range.match(/^'?([^'!]+)'?!/);
+      const tabName = tabMatch ? tabMatch[1] : '';
+
+      if (tabName === 'BackupMeta') {
+        metaRows = item.values || [];
+      } else if (tabName === 'BackupIndex') {
+        indexRows = item.values || [];
+      } else if (tabName) {
+        rawTabsData[tabName] = item.values || [];
+      }
+    }
 
     const matchingMetaRow = metaRows.find((r) => r && r[0] === backupId);
     if (!matchingMetaRow) {
       throw new Error(`Backup record for "${backupId}" not found in BackupMeta tab.`);
     }
 
-    // Step 3: Download Entity Tabs
-    const rawTabsData: Record<string, any[][]> = {};
-    let completedTabs = 2;
-
-    for (const tabTitle of ENTITY_TABS) {
-      notify({
-        stage: 'DOWNLOADING_ENTITIES',
-        currentTab: tabTitle,
-        completedTabs,
-        totalTabs: ENTITY_TABS.length + 2,
-        percentage: Math.min(70, Math.round((completedTabs / (ENTITY_TABS.length + 2)) * 70)),
-        message: `Downloading ${tabTitle} tab...`,
-      });
-
-      try {
-        const rows = await googleSheetsService.readSheetValues(
-          accessToken,
-          spreadsheetId,
-          `${tabTitle}!A1:Z`
-        );
-        rawTabsData[tabTitle] = rows || [];
-      } catch (err: any) {
-        // Tab might be empty or missing
-        rawTabsData[tabTitle] = [];
-      }
-
-      completedTabs++;
-    }
-
     // Step 4: Reconstruct Snapshot
     notify({
       stage: 'RECONSTRUCTING',
-      completedTabs,
+      completedTabs: ENTITY_TABS.length + 2,
       totalTabs: ENTITY_TABS.length + 2,
       percentage: 75,
       message: 'Reconstructing canonical snapshot structure in memory...',
@@ -270,7 +267,7 @@ export class GoogleBackupDownloaderService {
     // Step 5: Full Deep Validation
     notify({
       stage: 'VALIDATING',
-      completedTabs,
+      completedTabs: ENTITY_TABS.length + 2,
       totalTabs: ENTITY_TABS.length + 2,
       percentage: 85,
       message: 'Verifying relational integrity, schema and SHA-256 checksum...',

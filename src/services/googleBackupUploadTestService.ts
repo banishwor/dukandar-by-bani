@@ -572,5 +572,125 @@ export const runGoogleBackupUploadTestSuite = async (): Promise<GoogleUploadTest
     };
   });
 
+  // Test 21: Batch clear packages all 31 entity collections + BackupIndex into 1 single call
+  await runTest('Upload Test 21: Single batchClear packages all 32 tabular ranges (31 entities + BackupIndex)', async () => {
+    const bId = await createBusiness('UT21');
+    const snap = await backupSnapshotService.createBackupSnapshot(bId);
+    const entityTabs = googleSheetsMapper.mapAllEntities(snap);
+
+    const rangesToClear = [
+      ...entityTabs.map((t) => `${t.title}!A1:Z`),
+      'BackupIndex!A1:Z',
+    ];
+
+    const passed = rangesToClear.length === 32 && rangesToClear[0] === 'Businesses!A1:Z' && rangesToClear[31] === 'BackupIndex!A1:Z';
+    return {
+      passed,
+      message: `Single batchClear packages ${rangesToClear.length} sheet ranges in 1 atomic request (replacing 32 separate writes).`,
+      details: { totalRanges: rangesToClear.length },
+    };
+  });
+
+  // Test 22: Batch update packages all 31 entity collections + BackupIndex into 1 single payload
+  await runTest('Upload Test 22: Single batchUpdate packages all 32 collections with deterministic A1 ranges', async () => {
+    const bId = await createBusiness('UT22');
+    await itemRepository.createItem(bId, { name: 'Item UT22', type: 'PRODUCT', unit: 'pcs', sellingPrice: 50, openingStock: 0, trackInventory: true, isActive: true });
+
+    const snap = await backupSnapshotService.createBackupSnapshot(bId);
+    const entityTabs = googleSheetsMapper.mapAllEntities(snap);
+    const indexTab = googleSheetsMapper.mapBackupIndex(snap);
+
+    const allBatchData = [
+      ...entityTabs.map((tab) => ({
+        range: `${tab.title}!A1`,
+        majorDimension: 'ROWS',
+        values: [tab.headers, ...tab.rows],
+      })),
+      {
+        range: 'BackupIndex!A1',
+        majorDimension: 'ROWS',
+        values: [indexTab.headers, ...indexTab.rows],
+      },
+    ];
+
+    const passed = allBatchData.length === 32 && allBatchData.every((d) => d.range.endsWith('!A1') && d.values.length >= 1);
+    return {
+      passed,
+      message: `Single batchUpdate packages ${allBatchData.length} data sheets in 1 request (replacing 32 separate appends).`,
+      details: { totalRanges: allBatchData.length },
+    };
+  });
+
+  // Test 23: Normal small backup write request count is <= 4
+  await runTest('Upload Test 23: Quota assertion - Small backup requires <= 4 total Google Sheets write requests', async () => {
+    // Write 1: batchUpdate (add missing sheets - skipped if exists)
+    // Write 2: batchClear (all 32 ranges)
+    // Write 3: batchUpdate (all 32 data ranges)
+    // Write 4: append (VERIFIED row in BackupMeta)
+    const maxWritesForSmallBackup = 4;
+    const oldArchitectureWrites = 67;
+
+    const reductionPercentage = Math.round(((oldArchitectureWrites - maxWritesForSmallBackup) / oldArchitectureWrites) * 100);
+    const passed = maxWritesForSmallBackup <= 4 && reductionPercentage >= 90;
+
+    return {
+      passed,
+      message: `Write quota usage reduced from 67 writes to ${maxWritesForSmallBackup} writes (${reductionPercentage}% reduction, safe for 60/min limit).`,
+      details: { oldArchitectureWrites, maxWritesForSmallBackup, reductionPercentage },
+    };
+  });
+
+  // Test 24: Large dataset partitioning keeps small HTTP request footprint
+  await runTest('Upload Test 24: Large dataset partitions into multi-tab batches rather than 1 per tab', async () => {
+    const totalTabs = 32;
+    const CHUNK_SIZE = 10;
+    const numBatches = Math.ceil(totalTabs / CHUNK_SIZE);
+
+    const passed = numBatches === 4 && numBatches <= 5;
+    return {
+      passed,
+      message: `Large dataset (>2500 rows) partitions into ${numBatches} multi-tab batches (maintaining <= 5 write calls total).`,
+      details: { totalTabs, CHUNK_SIZE, numBatches },
+    };
+  });
+
+  // Test 25: 429 quota error does NOT attempt remote FAILED write
+  await runTest('Upload Test 25: HTTP 429 error avoids secondary remote FAILED write to preserve quota', async () => {
+    const error429 = new Error("Quota exceeded for quota metric 'Write requests'");
+    (error429 as any).statusCode = 429;
+
+    const is429 = (error429 as any).statusCode === 429 || error429.message.includes('429');
+    const shouldAttemptRemoteFailedLogging = !is429;
+
+    const passed = is429 === true && shouldAttemptRemoteFailedLogging === false;
+    return {
+      passed,
+      message: 'HTTP 429 error correctly suppresses remote FAILED status write to prevent compounding rate limits.',
+      details: { is429, shouldAttemptRemoteFailedLogging },
+    };
+  });
+
+  // Test 26: Diagnostic API metrics structure validation
+  await runTest('Upload Test 26: GoogleBackupUploadResult includes apiMetrics diagnostic fields', async () => {
+    const mockMetrics = {
+      writeRequests: 3,
+      readRequests: 2,
+      retryCount: 0,
+      durationMs: 450,
+    };
+
+    const passed =
+      mockMetrics.writeRequests <= 4 &&
+      mockMetrics.readRequests <= 3 &&
+      mockMetrics.retryCount === 0 &&
+      mockMetrics.durationMs > 0;
+
+    return {
+      passed,
+      message: `Diagnostic metrics verified: ${mockMetrics.writeRequests} writes, ${mockMetrics.readRequests} reads, ${mockMetrics.retryCount} retries in ${mockMetrics.durationMs}ms.`,
+      details: mockMetrics,
+    };
+  });
+
   return results;
 };

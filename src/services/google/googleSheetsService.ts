@@ -181,6 +181,84 @@ export const googleSheetsService = {
   },
 
   /**
+   * Clears cell values across multiple ranges in a single atomic batchClear request.
+   */
+  async batchClearValues(
+    accessToken: string,
+    spreadsheetId: string,
+    ranges: string[]
+  ): Promise<void> {
+    if (!ranges || ranges.length === 0) return;
+
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(
+      spreadsheetId
+    )}/values:batchClear`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ranges }),
+    });
+
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new GoogleSheetsApiError(
+        errorJson?.error?.message || `Failed to batch clear sheet ranges (HTTP ${res.status})`,
+        res.status,
+        errorJson
+      );
+    }
+  },
+
+  /**
+   * Writes values to multiple ranges/sheets in a single batchUpdate request.
+   */
+  async batchUpdateValues(
+    accessToken: string,
+    spreadsheetId: string,
+    data: Array<{ range: string; majorDimension?: string; values: any[][] }>,
+    valueInputOption = 'USER_ENTERED'
+  ): Promise<any> {
+    if (!data || data.length === 0) return;
+
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(
+      spreadsheetId
+    )}/values:batchUpdate`;
+
+    const formattedData = data.map((d) => ({
+      range: d.range,
+      majorDimension: d.majorDimension || 'ROWS',
+      values: d.values,
+    }));
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        valueInputOption,
+        data: formattedData,
+      }),
+    });
+
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new GoogleSheetsApiError(
+        errorJson?.error?.message || `Failed to batch update values (HTTP ${res.status})`,
+        res.status,
+        errorJson
+      );
+    }
+
+    return await res.json();
+  },
+
+  /**
    * Clears cell values in a specified A1 range or sheet.
    */
   async clearSheetValues(
@@ -272,6 +350,43 @@ export const googleSheetsService = {
 
     const data = await res.json();
     return data.values || [];
+  },
+
+  /**
+   * Reads multiple ranges/tabs from a spreadsheet in a single atomic batchGet HTTP request.
+   */
+  async batchGetValues(
+    accessToken: string,
+    spreadsheetId: string,
+    ranges: string[]
+  ): Promise<Array<{ range: string; values: any[][] }>> {
+    if (!ranges || ranges.length === 0) return [];
+
+    const queryParams = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join('&');
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(
+      spreadsheetId
+    )}/values:batchGet?${queryParams}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`;
+
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new GoogleSheetsApiError(
+        errorJson?.error?.message || `Failed to batch get sheet values (HTTP ${res.status})`,
+        res.status,
+        errorJson
+      );
+    }
+
+    const data = await res.json();
+    return (data.valueRanges || []).map((vr: any) => ({
+      range: vr.range || '',
+      values: vr.values || [],
+    }));
   },
 
   /**

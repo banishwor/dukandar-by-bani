@@ -3,6 +3,7 @@ import { useBusiness } from '../../contexts/BusinessContext';
 import { useToast } from '../../components/ui/Toast';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
+import { googleAuthService } from '../../services/google/googleAuthService';
 import { googleBackupDiscoveryService } from '../../services/google/googleBackupDiscoveryService';
 import { RestorePreviewModal } from './RestorePreviewModal';
 import type { RemoteBackupSnapshot, RemoteBackupDiscoveryResult } from '../../types/remoteBackup';
@@ -42,22 +43,27 @@ export const GoogleBackupHistory: React.FC<GoogleBackupHistoryProps> = ({
   const [previewBackupId, setPreviewBackupId] = useState<string | null>(null);
   const [showAllAttempts, setShowAllAttempts] = useState(false);
 
-  const fetchBackups = useCallback(async () => {
+  const fetchBackups = useCallback(async (interactive = true) => {
     if (!business || !spreadsheetId || !isOnline) return;
     try {
       setLoading(true);
-      const res = await googleBackupDiscoveryService.listRemoteBackups(business.id);
+      const res = await googleBackupDiscoveryService.listRemoteBackups(business.id, interactive);
       setDiscovery(res);
     } catch (err: any) {
-      console.error('Failed to discover remote backups', err);
-      // Suppress noisy error toast on initial render if user just connected
+      if (interactive) {
+        console.error('Failed to discover remote backups', err);
+        showError(err?.message || 'Failed to load remote backups.');
+      }
     } finally {
       setLoading(false);
     }
-  }, [business, spreadsheetId, isOnline]);
+  }, [business, spreadsheetId, isOnline, showError]);
 
   useEffect(() => {
-    fetchBackups();
+    // Only fetch automatically on mount if we already have an active in-memory token
+    if (googleAuthService.getAccessToken()) {
+      fetchBackups(false);
+    }
   }, [fetchBackups]);
 
   const handleSelectCandidate = (backup: RemoteBackupSnapshot) => {
@@ -126,6 +132,26 @@ export const GoogleBackupHistory: React.FC<GoogleBackupHistoryProps> = ({
         <div className="p-6 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
           <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
           <span>Discovering backups from Google Spreadsheet...</span>
+        </div>
+      )}
+
+      {/* Session Inactive / Initial state before user requests load */}
+      {!loading && !discovery && (
+        <div className="p-4 text-center text-xs text-slate-500 bg-slate-50 rounded-2xl border border-slate-200/70 flex flex-col items-center gap-2">
+          <Info className="w-5 h-5 text-blue-500" />
+          <p className="text-slate-600">
+            Remote backup history is stored in your private Google Spreadsheet.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchBackups(true)}
+            disabled={!isOnline}
+            className="text-xs text-blue-600 border-blue-200 hover:bg-blue-50 font-semibold"
+          >
+            <RefreshCw className="w-3.5 h-3.5 mr-1" />
+            Load Remote Backups
+          </Button>
         </div>
       )}
 

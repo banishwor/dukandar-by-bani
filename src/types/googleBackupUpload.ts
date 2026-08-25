@@ -35,6 +35,12 @@ export interface GoogleBackupUploadResult {
   checksum: string;
   recordCounts: BackupRecordCounts;
   errorMessage?: string;
+  apiMetrics?: {
+    writeRequests: number;
+    readRequests: number;
+    retryCount: number;
+    durationMs: number;
+  };
 }
 
 export interface LastSuccessfulBackupInfo {

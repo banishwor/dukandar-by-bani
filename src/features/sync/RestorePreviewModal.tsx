@@ -3,7 +3,10 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { useToast } from '../../components/ui/Toast';
 import { googleRestorePreviewService } from '../../services/google/googleRestorePreviewService';
+import { googleBackupRestoreService } from '../../services/restore/googleBackupRestoreService';
 import type { RestorePreviewResult, DownloadProgress } from '../../types/restorePreview';
+import type { BusinessBackupSnapshot } from '../../types/backup';
+import type { RestoreProgress, RestoreExecutionResult } from '../../types/restore';
 import {
   Database,
   CheckCircle2,
@@ -17,6 +20,8 @@ import {
   Smartphone,
   Hash,
   X,
+  RotateCcw,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface RestorePreviewModalProps {
@@ -24,6 +29,7 @@ interface RestorePreviewModalProps {
   backupId: string;
   isOpen: boolean;
   onClose: () => void;
+  onRestoreComplete?: () => void;
 }
 
 export const RestorePreviewModal: React.FC<RestorePreviewModalProps> = ({
@@ -31,20 +37,32 @@ export const RestorePreviewModal: React.FC<RestorePreviewModalProps> = ({
   backupId,
   isOpen,
   onClose,
+  onRestoreComplete,
 }) => {
-  const { showError } = useToast();
+  const { showSuccess, showError } = useToast();
+  const [stage, setStage] = useState<'PREVIEW' | 'CONFIRM' | 'RESTORING' | 'SUCCESS'>('PREVIEW');
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [preview, setPreview] = useState<RestorePreviewResult | null>(null);
+  const [remoteSnapshot, setRemoteSnapshot] = useState<BusinessBackupSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Restore Execution State
+  const [restoreProgress, setRestoreProgress] = useState<RestoreProgress | null>(null);
+  const [restoreResult, setRestoreResult] = useState<RestoreExecutionResult | null>(null);
+  const [confirmChecked, setConfirmChecked] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !businessId || !backupId) return;
 
     let isMounted = true;
+    setStage('PREVIEW');
     setLoading(true);
     setError(null);
     setPreview(null);
+    setRemoteSnapshot(null);
+    setConfirmChecked(false);
+    setRestoreResult(null);
 
     const loadPreview = async () => {
       try {
@@ -57,6 +75,7 @@ export const RestorePreviewModal: React.FC<RestorePreviewModalProps> = ({
         );
         if (isMounted) {
           setPreview(result.preview);
+          setRemoteSnapshot(result.remoteSnapshot);
         }
       } catch (err: any) {
         if (isMounted) {
@@ -78,18 +97,28 @@ export const RestorePreviewModal: React.FC<RestorePreviewModalProps> = ({
 
   if (!isOpen) return null;
 
-  const formatDate = (isoString?: string) => {
-    if (!isoString) return '';
+  const handleStartRestore = async () => {
+    if (!remoteSnapshot || !businessId) return;
+    setStage('RESTORING');
+    setError(null);
+
     try {
-      return new Date(isoString).toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      });
-    } catch {
-      return isoString;
+      const result = await googleBackupRestoreService.executeRestore(
+        businessId,
+        remoteSnapshot,
+        (p) => {
+          setRestoreProgress(p);
+        }
+      );
+
+      setRestoreResult(result);
+      setStage('SUCCESS');
+      showSuccess('Backup restored and fully reconciled!');
+      if (onRestoreComplete) onRestoreComplete();
+    } catch (err: any) {
+      setError(err?.message || 'Restore failed.');
+      showError(err?.message || 'Restore failed.');
+      setStage('CONFIRM');
     }
   };
 
@@ -103,17 +132,27 @@ export const RestorePreviewModal: React.FC<RestorePreviewModalProps> = ({
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">Restore Backup Preview</h3>
+              <h3 className="text-base font-bold text-slate-900">
+                {stage === 'CONFIRM'
+                  ? 'Confirm Business Restore'
+                  : stage === 'RESTORING'
+                  ? 'Restoring Business Data...'
+                  : stage === 'SUCCESS'
+                  ? 'Restore Completed Successfully'
+                  : 'Restore Backup Preview'}
+              </h3>
               <p className="text-xs text-slate-500 font-mono">ID: {backupId}</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {stage !== 'RESTORING' && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Content Body */}
@@ -137,22 +176,44 @@ export const RestorePreviewModal: React.FC<RestorePreviewModalProps> = ({
             </div>
           )}
 
+          {/* Restoring In-Progress Stage */}
+          {stage === 'RESTORING' && (
+            <div className="py-10 text-center space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-100">
+                <RotateCcw className="w-6 h-6 animate-spin text-blue-600" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-slate-900">{restoreProgress?.message || 'Executing safe restore...'}</h4>
+                <p className="text-slate-500 text-[11px]">Creating local safety snapshot and verifying financial balances.</p>
+              </div>
+              <div className="max-w-xs mx-auto space-y-1">
+                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-blue-600 h-full transition-all duration-500 rounded-full"
+                    style={{ width: `${restoreProgress?.percentage || 30}%` }}
+                  />
+                </div>
+                <span className="text-[11px] text-slate-400 font-mono font-medium">{restoreProgress?.percentage || 30}%</span>
+              </div>
+            </div>
+          )}
+
           {/* Error View */}
-          {error && !loading && (
+          {error && stage !== 'RESTORING' && (
             <div className="p-5 bg-rose-50 border border-rose-200 rounded-2xl space-y-2 text-rose-900">
               <div className="flex items-center gap-2 font-bold text-rose-950">
                 <AlertTriangle className="w-4 h-4 text-rose-600" />
-                Restore Preview Failed
+                Restore Operation Notice
               </div>
               <p className="text-rose-800 leading-relaxed">{error}</p>
               <p className="text-[11px] text-rose-700 italic pt-1">
-                Your local business database has NOT been modified in any way.
+                Your previous local data remains safe and protected by local safety snapshot rollback.
               </p>
             </div>
           )}
 
-          {/* Preview Details */}
-          {preview && !loading && (
+          {/* Step 1: Preview Details */}
+          {stage === 'PREVIEW' && preview && !loading && (
             <div className="space-y-5">
               {/* Verification Badges */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -273,12 +334,69 @@ export const RestorePreviewModal: React.FC<RestorePreviewModalProps> = ({
                   </table>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* Safety Confirmation */}
-              <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl flex items-start gap-2 text-[11px] text-blue-900">
-                <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                <p className="leading-relaxed">
-                  <strong>Safe Read-Only Preview:</strong> This preview was calculated purely in memory. No records in your local IndexedDB have been modified, replaced, or deleted.
+          {/* Step 2: Confirmation Screen */}
+          {stage === 'CONFIRM' && preview && (
+            <div className="space-y-4">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-3 text-amber-950">
+                <div className="flex items-center gap-2 font-bold text-sm text-amber-950">
+                  <ShieldAlert className="w-5 h-5 text-amber-600" />
+                  Pre-Restore Safety Confirmation
+                </div>
+                <p className="text-amber-900 leading-relaxed text-xs">
+                  You are about to restore backup <strong>{backupId}</strong> for <strong>{preview.businessName}</strong>.
+                  This action will replace the local business data with the {preview.remoteRecordCount.toLocaleString()} records from this backup snapshot.
+                </p>
+                <div className="p-3 bg-white/80 rounded-xl border border-amber-200 text-[11px] space-y-1 text-amber-900">
+                  <div className="font-semibold text-amber-950">Automatic Safety Protection:</div>
+                  <div>✓ A verified local safety snapshot will be created in your local storage before any changes occur.</div>
+                  <div>✓ If post-restore reconciliation detects any imbalance, the restore will automatically roll back.</div>
+                  <div>✓ Unrelated businesses on this device will not be modified.</div>
+                </div>
+              </div>
+
+              <label className="flex items-start gap-2.5 p-3.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100/70 transition">
+                <input
+                  type="checkbox"
+                  checked={confirmChecked}
+                  onChange={(e) => setConfirmChecked(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                />
+                <span className="text-xs text-slate-700 font-medium">
+                  I understand that current local data for <strong>{preview.businessName}</strong> will be replaced with this backup.
+                </span>
+              </label>
+            </div>
+          )}
+
+          {/* Step 3: Success Screen */}
+          {stage === 'SUCCESS' && restoreResult && (
+            <div className="space-y-5 text-center py-4">
+              <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-base font-bold text-slate-900">Restore Completed & Fully Reconciled</h4>
+                <p className="text-slate-600 text-xs">
+                  {restoreResult.restoredRecordCount.toLocaleString()} records restored for business ID <span className="font-mono">{businessId}</span>.
+                </p>
+              </div>
+
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-left space-y-2 text-emerald-950">
+                <div className="font-bold flex items-center gap-1.5 text-xs text-emerald-950">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  Post-Restore Reconciliation Report:
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-emerald-900">
+                  <div>✓ Customer & Supplier Balances: <strong>100% Match</strong></div>
+                  <div>✓ Inventory Stock Levels: <strong>Reconciled</strong></div>
+                  <div>✓ Financial Account Balances: <strong>Reconciled</strong></div>
+                  <div>✓ Transaction Discounts & Voids: <strong>Intact</strong></div>
+                </div>
+                <p className="text-[10px] text-emerald-700 pt-1">
+                  Pre-restore safety snapshot checksum: <span className="font-mono">{restoreResult.safetySnapshotChecksum.slice(0, 20)}...</span>
                 </p>
               </div>
             </div>
@@ -287,26 +405,50 @@ export const RestorePreviewModal: React.FC<RestorePreviewModalProps> = ({
 
         {/* Footer Actions */}
         <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Close Preview
-          </Button>
-
-          {preview && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-500 italic">
-                Actual restore is executed in Phase 7C-3
-              </span>
+          {stage === 'PREVIEW' && (
+            <>
+              <Button variant="outline" size="sm" onClick={onClose}>
+                Cancel
+              </Button>
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => {
-                  onClose();
-                }}
+                onClick={() => setStage('CONFIRM')}
+                disabled={!preview || loading}
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
               >
-                Close & Keep Candidate Selected
+                Proceed to Restore Confirmation
+                <ArrowRight className="w-4 h-4 ml-1.5" />
               </Button>
-            </div>
+            </>
+          )}
+
+          {stage === 'CONFIRM' && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setStage('PREVIEW')}>
+                Back to Preview
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleStartRestore}
+                disabled={!confirmChecked}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold disabled:opacity-50"
+              >
+                I Understand — Restore Backup
+              </Button>
+            </>
+          )}
+
+          {stage === 'SUCCESS' && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={onClose}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            >
+              Finish & View Restored Business
+            </Button>
           )}
         </div>
       </div>

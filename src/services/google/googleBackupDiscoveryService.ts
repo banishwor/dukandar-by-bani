@@ -173,7 +173,10 @@ export class GoogleBackupDiscoveryService {
   /**
    * Lists remote backup snapshots from Google Sheets for the active business.
    */
-  async listRemoteBackups(businessId: string): Promise<RemoteBackupDiscoveryResult> {
+  async listRemoteBackups(
+    businessId: string,
+    interactive = true
+  ): Promise<RemoteBackupDiscoveryResult> {
     const localMeta = await googleBackupService.getLocalMetadata(businessId);
     if (!localMeta || !localMeta.spreadsheetId) {
       throw new Error(
@@ -185,6 +188,9 @@ export class GoogleBackupDiscoveryService {
 
     let accessToken = googleAuthService.getAccessToken();
     if (!accessToken) {
+      if (!interactive) {
+        throw new Error('Google authorization token not active in current session.');
+      }
       accessToken = await googleAuthService.requestAccessToken();
     }
 

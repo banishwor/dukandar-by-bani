@@ -783,7 +783,6 @@ export const crossDomainReconciliationService = {
     }
 
     const passed = allChecks.every((c) => c.passed);
-
     return {
       scenario: scenarioName,
       passed,
@@ -791,8 +790,15 @@ export const crossDomainReconciliationService = {
       timestamp: new Date().toISOString(),
       businessId,
       summaryMessage: passed
-        ? `Reconciliation PASSED: ${allChecks.length}/${allChecks.length} independent checks verified across domains.`
-        : `Reconciliation FAILED: ${allChecks.filter((c) => !c.passed).length} checks failed.`,
+        ? `Audit passed: ${allChecks.length} checks reconciled with 100% integrity.`
+        : `Audit failed: ${allChecks.filter((c) => !c.passed).length} of ${allChecks.length} checks failed reconciliation.`,
     };
+  },
+
+  /**
+   * Post-restore full business audit.
+   */
+  async reconcileBusiness(businessId: string): Promise<ReconciliationReport> {
+    return this.runFullReconciliationAudit(businessId, 'Post-Restore Full Reconciliation Audit');
   },
 };

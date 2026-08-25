@@ -9,6 +9,7 @@ import { runBackupTestSuite } from '../services/backupTestService';
 import { runGoogleBackupUploadTestSuite } from '../services/googleBackupUploadTestService';
 import { runGoogleBackupDiscoveryTestSuite } from '../services/googleBackupDiscoveryTestService';
 import { runGoogleBackupRestorePreviewTestSuite } from '../services/googleBackupRestorePreviewTestService';
+import { runGoogleBackupRestoreTestSuite } from '../services/googleBackupRestoreTestService';
 import { businessRepository } from '../repositories/businessRepository';
 
 async function main() {
@@ -104,7 +105,7 @@ async function main() {
     else failedCount++;
   }
 
-  console.log('\n--- SECTION 7: PHASE 7B-2 GOOGLE BACKUP UPLOAD TESTS (1 - 20) ---');
+  console.log('\n--- SECTION 7: PHASE 7B-2 GOOGLE BACKUP UPLOAD & QUOTA OPTIMIZATION TESTS (1 - 26) ---');
   const uploadResults = await runGoogleBackupUploadTestSuite();
 
   for (const r of uploadResults) {
@@ -140,6 +141,18 @@ async function main() {
     else failedCount++;
   }
 
+  console.log('\n--- SECTION 10: PHASE 7C-3 SAFE RESTORE & RECONCILIATION TESTS (1 - 20) ---');
+  const restoreResults = await runGoogleBackupRestoreTestSuite();
+
+  for (const r of restoreResults) {
+    const status = r.passed ? '✓ PASS' : '✗ FAIL';
+    console.log(`[${status}] ${r.name} (${r.durationMs}ms)`);
+    console.log(`  Message: ${r.message}`);
+    console.log('');
+    if (r.passed) passedCount++;
+    else failedCount++;
+  }
+
   const totalScenarios =
     integrityResults.length +
     reconResults.length +
@@ -149,7 +162,8 @@ async function main() {
     backupResults.length +
     uploadResults.length +
     discoveryResults.length +
-    previewResults.length;
+    previewResults.length +
+    restoreResults.length;
 
   console.log('================================================================');
   console.log(`GRAND SUMMARY: ${passedCount} PASSED, ${failedCount} FAILED (TOTAL: ${totalScenarios} TESTS)`);
@@ -162,6 +176,7 @@ async function main() {
   console.log(`  - Section 7 (Backup Upload):      ${uploadResults.filter((r) => r.passed).length}/${uploadResults.length} Passed`);
   console.log(`  - Section 8 (Backup Discovery):   ${discoveryResults.filter((r) => r.passed).length}/${discoveryResults.length} Passed`);
   console.log(`  - Section 9 (Restore Preview):    ${previewResults.filter((r) => r.passed).length}/${previewResults.length} Passed`);
+  console.log(`  - Section 10 (Safe Restore):      ${restoreResults.filter((r) => r.passed).length}/${restoreResults.length} Passed`);
   console.log('================================================================');
 
   if (failedCount > 0) {
