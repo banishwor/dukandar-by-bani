@@ -1,0 +1,6 @@
+{
+  "name": "Offline Business Manager PWA",
+  "description": "Offline-first business management Progressive Web App for sales, purchases, suppliers, inventory stock-in/out, FIFO payments, credit ledgers, and compensating corrections powered by local IndexedDB.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

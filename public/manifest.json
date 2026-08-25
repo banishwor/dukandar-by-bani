@@ -1,0 +1,17 @@
+{
+  "short_name": "BizManager",
+  "name": "Offline Business Manager PWA",
+  "description": "Offline-first business management Progressive Web App for inventory, customer balances, and point-of-sale transactions",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ]
+}
