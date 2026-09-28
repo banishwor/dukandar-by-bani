@@ -392,13 +392,14 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
               </div>
             )}
 
-            {/* Technical Metadata Footer */}
-            <div className="pt-4 border-t border-dashed border-slate-200 text-[11px] text-slate-400 flex flex-wrap items-center justify-between gap-2">
-              <span className="flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                Device: {purchase.createdByDeviceId?.substring(0, 16)}...
+            {/* Purchase Voucher Footer */}
+            <div className="pt-4 border-t border-slate-200 text-xs text-slate-500 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <span className="italic text-slate-400">
+                Official Purchase Voucher · Inventory balances updated.
               </span>
-              <span className="font-mono">UUID: {purchase.id}</span>
+              <span className="text-[11px] text-slate-400 font-mono">
+                Recorded on {formatDateTime(purchase.createdAt)}
+              </span>
             </div>
           </div>
 

@@ -1,40 +1,35 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useBusiness } from '../../contexts/BusinessContext';
 import { itemRepository } from '../../repositories/itemRepository';
 import { customerRepository } from '../../repositories/customerRepository';
 import { paymentService } from '../../services/paymentService';
 import { saleService, InsufficientStockError } from '../../services/saleService';
 import { financialAccountService } from '../../services/financialAccountService';
-import type { ItemWithStock, Customer, SaleCartLine, PaymentMethod, FinancialAccount, DiscountType } from '../../types';
+import type { ItemWithStock, Customer, PaymentMethod, FinancialAccount, DiscountType, Sale } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { roundCurrency } from '../../utils/money';
 import { discountUtils } from '../../utils/discount';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { Badge } from '../../components/ui/Badge';
 import { CustomerFormModal } from '../customers/CustomerFormModal';
 import { useToast } from '../../components/ui/Toast';
+import { useSaleDrafts, type SaleCartLine } from './useSaleDrafts';
+import { SaleDraftTabs } from './SaleDraftTabs';
+import { InlineCustomerSearch } from './InlineCustomerSearch';
+import { SpreadsheetInvoiceGrid } from './SpreadsheetInvoiceGrid';
+import { sampleDataService } from '../../services/sampleDataService';
 import confetti from 'canvas-confetti';
 import {
-  ShoppingCart,
-  Search,
-  Plus,
-  Minus,
-  Trash2,
-  User,
-  UserPlus,
-  CreditCard,
   Check,
-  AlertCircle,
   Receipt,
-  ArrowRight,
   Sparkles,
-  Package,
-  X,
-  Coins,
-  Building2,
-  Wallet,
-  Percent,
+  Plus,
+  Banknote,
+  BookOpen,
+  Split,
+  Calendar,
+  FileText,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface NewSaleViewProps {
@@ -53,30 +48,29 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
   const [items, setItems] = useState<ItemWithStock[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+  const [defaultAccountId, setDefaultAccountId] = useState<string>('');
   const [loadingData, setLoadingData] = useState(true);
+  const [isLoadingSampleData, setIsLoadingSampleData] = useState(false);
+  const [isNotesExpanded, setIsNotesExpanded] = useState(false);
 
-  // Sale form state
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
-  const [customerCreditAvailable, setCustomerCreditAvailable] = useState<number>(0);
-  const [applyCustomerCredit, setApplyCustomerCredit] = useState<boolean>(false);
+  // Modals
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
 
-  // Cart
-  const [cart, setCart] = useState<SaleCartLine[]>([]);
-  const [itemSearchQuery, setItemSearchQuery] = useState('');
-
-  // Payment & Totals
-  const [overallDiscountType, setOverallDiscountType] = useState<DiscountType>('NONE');
-  const [overallDiscountValue, setOverallDiscountValue] = useState<string>('');
-  const [paymentMode, setPaymentMode] = useState<'FULL' | 'UNPAID' | 'PARTIAL'>('FULL');
-  const [customPaidAmount, setCustomPaidAmount] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
-  const [financialAccountId, setFinancialAccountId] = useState<string>('');
-  const [saleNotes, setSaleNotes] = useState('');
+  // Multi-Draft Hook
+  const {
+    drafts,
+    activeDraft,
+    activeDraftId,
+    setActiveDraftId,
+    updateActiveDraft,
+    addNewDraft,
+    closeDraft,
+    resetCurrentDraft,
+  } = useSaleDrafts(defaultAccountId);
 
   // Processing state
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [completedSaleId, setCompletedSaleId] = useState<string | null>(null);
+  const [completedSale, setCompletedSale] = useState<Sale | null>(null);
 
   const loadData = useCallback(async () => {
     if (!business) return;
@@ -93,43 +87,73 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
       setAccounts(activeAccounts);
 
       if (defaultAcc) {
-        setFinancialAccountId(defaultAcc.id);
-      } else if (activeAccounts.length > 0) {
-        setFinancialAccountId(activeAccounts[0].id);
+        setDefaultAccountId(defaultAcc.id);
+        if (!activeDraft?.financialAccountId) {
+          updateActiveDraft({ financialAccountId: defaultAcc.id });
+        }
+      } else if (activeAccounts.length > 0 && !activeDraft?.financialAccountId) {
+        updateActiveDraft({ financialAccountId: activeAccounts[0].id });
       }
     } catch (err) {
       console.error('Failed to load data for sale', err);
     } finally {
       setLoadingData(false);
     }
-  }, [business]);
+  }, [business, activeDraft?.financialAccountId, updateActiveDraft]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // When customer changes, load their credit
-  useEffect(() => {
-    if (selectedCustomerId) {
+  // Extract active draft values with fallbacks
+  const cart = activeDraft?.cart || [];
+  const selectedCustomerId = activeDraft?.selectedCustomerId || '';
+  const customerCreditAvailable = activeDraft?.customerCreditAvailable || 0;
+  const applyCustomerCredit = activeDraft?.applyCustomerCredit || false;
+  const overallDiscountType = activeDraft?.overallDiscountType || 'NONE';
+  const overallDiscountValue = activeDraft?.overallDiscountValue || '';
+  const paymentMode = activeDraft?.paymentMode || 'FULL';
+  const customPaidAmount = activeDraft?.customPaidAmount || '';
+  const cashTenderAmount = activeDraft?.cashTenderAmount || '';
+  const paymentMethod = activeDraft?.paymentMethod || 'CASH';
+  const financialAccountId = activeDraft?.financialAccountId || defaultAccountId;
+  const saleNotes = activeDraft?.notes || '';
+
+  // Filter valid line items that have an item selected or a quick-added product
+  const validCartLines = cart.filter((line) => Boolean(line.itemId || line.isNewItem || line.name?.trim()));
+
+  // When customer changes, load their credit into active draft
+  const handleSelectCustomer = useCallback(
+    (customerId: string) => {
+      if (!customerId) {
+        updateActiveDraft({
+          selectedCustomerId: '',
+          customerCreditAvailable: 0,
+          applyCustomerCredit: false,
+          paymentMode: 'FULL',
+        });
+        return;
+      }
+
       paymentService
-        .getCustomerFinancialSummary(selectedCustomerId)
+        .getCustomerFinancialSummary(customerId)
         .then((sum) => {
-          setCustomerCreditAvailable(sum.customerCredit);
-          if (sum.customerCredit > 0) {
-            setApplyCustomerCredit(true);
-          } else {
-            setApplyCustomerCredit(false);
-          }
+          updateActiveDraft({
+            selectedCustomerId: customerId,
+            customerCreditAvailable: sum.customerCredit,
+            applyCustomerCredit: sum.customerCredit > 0,
+          });
         })
         .catch(() => {
-          setCustomerCreditAvailable(0);
-          setApplyCustomerCredit(false);
+          updateActiveDraft({
+            selectedCustomerId: customerId,
+            customerCreditAvailable: 0,
+            applyCustomerCredit: false,
+          });
         });
-    } else {
-      setCustomerCreditAvailable(0);
-      setApplyCustomerCredit(false);
-    }
-  }, [selectedCustomerId]);
+    },
+    [updateActiveDraft]
+  );
 
   // Selected customer object or Walk-in
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
@@ -138,7 +162,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
   // Pure Discount Engine Calculations
   const parsedOverallValue = Math.max(0, parseFloat(overallDiscountValue) || 0);
   const transactionCalc = discountUtils.calculateTransactionTotals(
-    cart.map((line) => ({
+    validCartLines.map((line) => ({
       quantity: line.quantity,
       rateOrCost: line.rate,
       discountType: line.discountType || 'NONE',
@@ -177,91 +201,27 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
   const totalEffectivePaid = roundCurrency(creditToApply + directPaidAmount);
   const dueAmount = roundCurrency(Math.max(0, grandTotal - totalEffectivePaid));
 
-  // Cart actions
-  const handleAddToCart = (item: ItemWithStock) => {
-    setCart((prev) => {
-      const existing = prev.find((line) => line.itemId === item.id);
-      if (existing) {
-        return prev.map((line) =>
-          line.itemId === item.id ? { ...line, quantity: line.quantity + 1 } : line
-        );
-      }
-      return [
-        ...prev,
-        {
-          itemId: item.id,
-          name: item.name,
-          unit: item.unit,
-          rate: item.sellingPrice,
-          quantity: 1,
-          discountType: 'NONE',
-          discountValue: 0,
-          discountAmount: 0,
-          taxAmount: 0,
-          trackInventory: item.trackInventory,
-          availableStock: item.currentStock,
-        },
-      ];
-    });
-  };
-
-  const handleUpdateQuantity = (itemId: string, newQty: number) => {
-    if (newQty <= 0) {
-      handleRemoveLine(itemId);
-      return;
-    }
-    setCart((prev) =>
-      prev.map((line) => {
-        if (line.itemId !== itemId) return line;
-        const lineNet = discountUtils.calculateLineNet(
-          newQty,
-          line.rate,
-          line.discountType,
-          line.discountValue,
-          line.taxAmount
-        );
-        return {
-          ...line,
-          quantity: newQty,
-          discountAmount: lineNet.discountAmount,
-        };
-      })
-    );
-  };
-
-  const handleUpdateLineDiscount = (
-    itemId: string,
-    discountType: DiscountType,
-    discountValue: number
-  ) => {
-    setCart((prev) =>
-      prev.map((line) => {
-        if (line.itemId !== itemId) return line;
-        const lineNet = discountUtils.calculateLineNet(
-          line.quantity,
-          line.rate,
-          discountType,
-          discountValue,
-          line.taxAmount
-        );
-        return {
-          ...line,
-          discountType,
-          discountValue,
-          discountAmount: lineNet.discountAmount,
-        };
-      })
-    );
-  };
-
-  const handleRemoveLine = (itemId: string) => {
-    setCart((prev) => prev.filter((line) => line.itemId !== itemId));
-  };
-
   const handleCustomerCreated = (created?: Customer) => {
     loadData();
     if (created) {
-      setSelectedCustomerId(created.id);
+      handleSelectCustomer(created.id);
+    }
+  };
+
+  const handleLoadSampleData = async () => {
+    if (!business) return;
+    try {
+      setIsLoadingSampleData(true);
+      const summary = await sampleDataService.loadSampleData(business.id);
+      showSuccess(
+        `Loaded ${summary.itemsCount} products, ${summary.customersCount} customers, and sample sales!`
+      );
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to load sample data', err);
+      showError(err.message || 'Failed to load sample data');
+    } finally {
+      setIsLoadingSampleData(false);
     }
   };
 
@@ -269,30 +229,71 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
   const handleCompleteSale = async () => {
     if (!business) return;
 
-    if (cart.length === 0) {
-      showError('Please add at least one item to cart before completing sale.');
+    if (validCartLines.length === 0) {
+      showError('Please select at least one item before completing sale.');
+      return;
+    }
+
+    if (paymentMode !== 'FULL' && !selectedCustomerId) {
+      showError('Credit / Khata and Partial sales require selecting a registered customer.');
+      customerInputRef.current?.focus();
       return;
     }
 
     try {
       setIsSubmitting(true);
 
+      // Auto-create any unlisted/new items in inventory database on the fly
+      let newItemsCreatedCount = 0;
+      const resolvedLines = [];
+
+      for (const line of validCartLines) {
+        if (!line.itemId || line.isNewItem) {
+          const created = await itemRepository.createItem(business.id, {
+            name: line.name.trim(),
+            type: 'PRODUCT',
+            unit: line.unit || 'pcs',
+            sellingPrice: line.rate,
+            purchasePrice: 0,
+            costPrice: 0,
+            openingStock: 0,
+            trackInventory: true,
+            isActive: true,
+          });
+          newItemsCreatedCount++;
+          resolvedLines.push({
+            itemId: created.id,
+            itemNameSnapshot: created.name,
+            quantity: line.quantity,
+            unit: created.unit,
+            rate: line.rate,
+            discountType: line.discountType || 'NONE',
+            discountValue: line.discountValue || 0,
+            discountAmount: line.discountAmount || 0,
+            taxAmount: line.taxAmount || 0,
+            trackInventory: true,
+          });
+        } else {
+          resolvedLines.push({
+            itemId: line.itemId,
+            itemNameSnapshot: line.name,
+            quantity: line.quantity,
+            unit: line.unit,
+            rate: line.rate,
+            discountType: line.discountType || 'NONE',
+            discountValue: line.discountValue || 0,
+            discountAmount: line.discountAmount || 0,
+            taxAmount: line.taxAmount || 0,
+            trackInventory: line.trackInventory,
+          });
+        }
+      }
+
       const createdSale = await saleService.completeSale(business.id, {
         customerId: selectedCustomerId || undefined,
         customerNameSnapshot: customerDisplayName,
         saleDate: new Date().toISOString(),
-        lines: cart.map((line) => ({
-          itemId: line.itemId,
-          itemNameSnapshot: line.name,
-          quantity: line.quantity,
-          unit: line.unit,
-          rate: line.rate,
-          discountType: line.discountType || 'NONE',
-          discountValue: line.discountValue || 0,
-          discountAmount: line.discountAmount || 0,
-          taxAmount: line.taxAmount || 0,
-          trackInventory: line.trackInventory,
-        })),
+        lines: resolvedLines,
         subtotal: transactionCalc.subtotal,
         discountType: transactionCalc.overallDiscountType,
         discountValue: transactionCalc.overallDiscountValue,
@@ -304,6 +305,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
         paymentMethod,
         financialAccountId: financialAccountId || undefined,
         notes: saleNotes.trim() || undefined,
+        allowNegativeStock: business.allowNegativeStock ?? true,
       });
 
       // Confetti celebration
@@ -317,8 +319,17 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
         // ignore
       }
 
-      showSuccess(`Sale #${createdSale.invoiceNumber} recorded successfully!`);
-      setCompletedSaleId(createdSale.id);
+      const extraMsg =
+        newItemsCreatedCount > 0
+          ? ` (${newItemsCreatedCount} new product${newItemsCreatedCount > 1 ? 's' : ''} added to inventory)`
+          : '';
+      showSuccess(`Sale #${createdSale.invoiceNumber} recorded successfully!${extraMsg}`);
+      setCompletedSale(createdSale);
+      resetCurrentDraft();
+
+      if (newItemsCreatedCount > 0) {
+        await loadData();
+      }
     } catch (err: any) {
       console.error('Sale error', err);
       if (err instanceof InsufficientStockError) {
@@ -331,16 +342,90 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
     }
   };
 
-  // Filter items for quick item catalog
-  const filteredCatalog = items.filter(
-    (item) =>
-      item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||
-      (item.sku && item.sku.toLowerCase().includes(itemSearchQuery.toLowerCase())) ||
-      (item.category && item.category.toLowerCase().includes(itemSearchQuery.toLowerCase()))
-  );
+  const customerInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Global Keyboard Shortcuts (100% Mouse-Free Invoicing)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // F4 or Ctrl+Enter: Complete & Save Invoice
+      if (e.key === 'F4' || (e.ctrlKey && e.key === 'Enter')) {
+        e.preventDefault();
+        if (validCartLines.length > 0 && !isSubmitting) {
+          handleCompleteSale();
+        }
+      }
+      // F2: Jump to Customer Search
+      else if (e.key === 'F2') {
+        e.preventDefault();
+        customerInputRef.current?.focus();
+        customerInputRef.current?.select();
+      }
+      // F3: Cycle Payment Terms (Cash -> Khata -> Partial)
+      else if (e.key === 'F3') {
+        e.preventDefault();
+        if (!selectedCustomerId) {
+          showError('Credit / Khata requires selecting a registered customer (Press F2).');
+          customerInputRef.current?.focus();
+          return;
+        }
+        updateActiveDraft({
+          paymentMode:
+            paymentMode === 'FULL'
+              ? 'UNPAID'
+              : paymentMode === 'UNPAID'
+              ? 'PARTIAL'
+              : 'FULL',
+        });
+      }
+      // F8: Add New Draft / Sale Tab
+      else if (e.key === 'F8') {
+        e.preventDefault();
+        addNewDraft();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [validCartLines, isSubmitting, paymentMode, selectedCustomerId, updateActiveDraft, addNewDraft, showError]);
+
+  // Cash Tender & Change Calculations
+  const tenderNumber = parseFloat(cashTenderAmount) || 0;
+  const changeDue =
+    paymentMethod === 'CASH' && paymentMode !== 'UNPAID' && tenderNumber > directPaidAmount
+      ? roundCurrency(tenderNumber - directPaidAmount)
+      : 0;
+
+  // Generate smart quick-cash tender suggestions
+  const getCashTenderPresets = (amount: number) => {
+    if (amount <= 0) return [];
+    const presets = new Set<number>();
+    presets.add(roundCurrency(amount)); // Exact cash
+
+    if (amount < 100) {
+      if (amount < 50) presets.add(50);
+      presets.add(100);
+      presets.add(200);
+      presets.add(500);
+    } else if (amount < 500) {
+      presets.add(Math.ceil(amount / 50) * 50);
+      presets.add(Math.ceil(amount / 100) * 100);
+      presets.add(500);
+      presets.add(1000);
+    } else if (amount < 1000) {
+      presets.add(Math.ceil(amount / 100) * 100);
+      presets.add(1000);
+      presets.add(2000);
+    } else {
+      presets.add(Math.ceil(amount / 500) * 500);
+      presets.add(Math.ceil(amount / 1000) * 1000);
+      presets.add(Math.ceil(amount / 2000) * 2000);
+    }
+
+    return Array.from(presets).filter((v) => v >= amount).slice(0, 4);
+  };
 
   // Success view
-  if (completedSaleId) {
+  if (completedSale) {
     return (
       <div className="max-w-md mx-auto py-12 px-4 text-center space-y-6">
         <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-2xs">
@@ -349,37 +434,37 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Sale Complete!</h2>
           <p className="text-sm text-slate-500 mt-1">
-            Transaction saved locally to IndexedDB, stock balances adjusted, and payment allocations recorded.
+            Invoice #{completedSale.invoiceNumber} created successfully. Stock balances and payment records have been updated.
           </p>
         </div>
 
         <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-2 text-left text-sm">
           <div className="flex justify-between">
+            <span className="text-slate-500">Invoice:</span>
+            <span className="font-bold text-slate-900 font-mono">#{completedSale.invoiceNumber}</span>
+          </div>
+          <div className="flex justify-between">
             <span className="text-slate-500">Customer:</span>
-            <span className="font-bold text-slate-900">{customerDisplayName}</span>
+            <span className="font-bold text-slate-900">{completedSale.customerNameSnapshot}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-slate-500">Total Amount:</span>
             <span className="font-bold text-slate-900 font-mono">
-              {formatCurrency(grandTotal, business?.currencySymbol)}
+              {formatCurrency(completedSale.totalAmount, business?.currencySymbol)}
             </span>
           </div>
-          {creditToApply > 0 && (
-            <div className="flex justify-between text-blue-600 font-semibold">
-              <span>Credit Applied:</span>
-              <span className="font-mono">{formatCurrency(creditToApply, business?.currencySymbol)}</span>
+          {completedSale.paidAmount > 0 && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Direct Payment Received:</span>
+              <span className="font-bold text-emerald-600 font-mono">
+                {formatCurrency(completedSale.paidAmount, business?.currencySymbol)}
+              </span>
             </div>
           )}
-          <div className="flex justify-between">
-            <span className="text-slate-500">Direct Payment Received:</span>
-            <span className="font-bold text-emerald-600 font-mono">
-              {formatCurrency(directPaidAmount, business?.currencySymbol)}
-            </span>
-          </div>
-          {dueAmount > 0 && (
+          {completedSale.dueAmount > 0 && (
             <div className="flex justify-between text-rose-600 font-bold">
               <span>Remaining Balance Due:</span>
-              <span className="font-mono">{formatCurrency(dueAmount, business?.currencySymbol)}</span>
+              <span className="font-mono">{formatCurrency(completedSale.dueAmount, business?.currencySymbol)}</span>
             </div>
           )}
         </div>
@@ -389,7 +474,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
             variant="primary"
             size="lg"
             icon={Receipt}
-            onClick={() => onSaleCompleted?.(completedSaleId)}
+            onClick={() => onSaleCompleted?.(completedSale.id)}
             fullWidth
           >
             View Invoice Details
@@ -400,14 +485,8 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
             size="lg"
             icon={Plus}
             onClick={() => {
-              setCompletedSaleId(null);
-              setCart([]);
-              setSelectedCustomerId('');
-              setOverallDiscountType('NONE');
-              setOverallDiscountValue('');
-              setPaymentMode('FULL');
-              setCustomPaidAmount('');
-              setSaleNotes('');
+              setCompletedSale(null);
+              resetCurrentDraft();
               loadData();
             }}
             fullWidth
@@ -420,447 +499,186 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
   }
 
   return (
-    <div className="space-y-6 pb-24 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">New Sale Invoice</h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Select items, adjust payment, apply credit, and record sale atomically.
-          </p>
+    <div className="space-y-4 pb-24 max-w-7xl mx-auto">
+      {/* 1. Multi-Draft Tabs Top Bar + Mouse-Free Shortcuts Pill */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs">
+        <div className="flex-1">
+          <SaleDraftTabs
+            drafts={drafts}
+            activeDraftId={activeDraftId}
+            currencySymbol={business?.currencySymbol}
+            onSelectDraft={setActiveDraftId}
+            onNewDraft={addNewDraft}
+            onCloseDraft={closeDraft}
+          />
         </div>
+
+        {/* Mouse-Free Keyboard Shortcuts Indicator Bar */}
+        <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80">
+          <span className="font-bold text-slate-700 flex items-center gap-1 mr-1">
+            ⚡ Keys:
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <kbd className="bg-white px-1.5 py-0.5 rounded border text-[10px] font-mono font-bold text-slate-800 shadow-3xs">F2</kbd> Customer
+          </span>
+          <span className="text-slate-300">·</span>
+          <span className="inline-flex items-center gap-1">
+            <kbd className="bg-white px-1.5 py-0.5 rounded border text-[10px] font-mono font-bold text-slate-800 shadow-3xs">F3</kbd> Cash/Khata
+          </span>
+          <span className="text-slate-300">·</span>
+          <span className="inline-flex items-center gap-1">
+            <kbd className="bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shadow-3xs">F4</kbd> Checkout
+          </span>
+        </div>
+
         {onCancel && (
-          <Button variant="ghost" size="sm" onClick={onCancel}>
+          <Button variant="ghost" size="sm" onClick={onCancel} className="self-end md:self-center shrink-0">
             Cancel
           </Button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Customer & Item Selection (7 cols) */}
-        <div className="lg:col-span-7 space-y-5">
-          {/* Step 1: Customer Selection */}
-          <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-blue-600" />
-                Customer
-              </label>
 
-              <button
-                type="button"
-                onClick={() => setIsAddCustomerOpen(true)}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                + Add Customer
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedCustomerId('')}
-                className={`p-3 rounded-xl border text-left text-xs font-medium transition-all flex items-center justify-between ${
-                  !selectedCustomerId
-                    ? 'bg-blue-50 border-blue-400 text-blue-900 ring-1 ring-blue-400'
-                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div>
-                  <span className="font-bold block">Walk-in Customer</span>
-                  <span className="text-[11px] text-slate-400">Cash / Direct Sale</span>
-                </div>
-                {!selectedCustomerId && <Check className="w-4 h-4 text-blue-600" />}
-              </button>
-
-              <div className="relative">
-                <select
-                  value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="w-full h-full min-h-[50px] px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-slate-900"
-                >
-                  <option value="">Select registered customer...</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} {c.phone ? `(${c.phone})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Customer Credit Notice */}
-            {customerCreditAvailable > 0 && (
-              <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center justify-between text-xs text-blue-900">
-                <div className="flex items-center gap-2">
-                  <Coins className="w-4 h-4 text-blue-600 shrink-0" />
-                  <div>
-                    <span className="font-bold">Available Credit: </span>
-                    <span className="font-mono font-bold">
-                      {formatCurrency(customerCreditAvailable, business?.currencySymbol)}
-                    </span>
-                  </div>
-                </div>
-
-                <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-blue-800">
-                  <input
-                    type="checkbox"
-                    checked={applyCustomerCredit}
-                    onChange={(e) => setApplyCustomerCredit(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded"
-                  />
-                  <span>Apply Credit</span>
-                </label>
-              </div>
-            )}
+      {/* 2. Invoice Header Canvas (Customer Search + 1-Click Cash/Credit Switch + Invoice Info) */}
+      <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Customer Selection with Live Khata Status */}
+          <div className="flex-1 min-w-[280px]">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1.5">
+              Customer Details <span className="text-[10px] font-normal text-slate-400 font-mono">(Press F2)</span>
+            </label>
+            <InlineCustomerSearch
+              customers={customers}
+              customerInputRef={customerInputRef}
+              selectedCustomerId={selectedCustomerId}
+              customerCreditAvailable={customerCreditAvailable}
+              applyCustomerCredit={applyCustomerCredit}
+              currencySymbol={business?.currencySymbol}
+              onSelectCustomer={handleSelectCustomer}
+              onToggleApplyCredit={(apply) => updateActiveDraft({ applyCustomerCredit: apply })}
+              onOpenAddCustomerModal={() => setIsAddCustomerOpen(true)}
+            />
           </div>
 
-          {/* Step 2: Item Catalog Search & Quick Selector */}
-          <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <Package className="w-3.5 h-3.5 text-blue-600" />
-                Select Items to Sell
-              </label>
-              <span className="text-xs text-slate-400">{items.length} items in catalog</span>
+          {/* 1-Click Cash / Credit Segmented Pill */}
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1.5">
+              Payment Terms {!selectedCustomerId && (
+                <span className="text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 ml-1">
+                  Walk-in: Cash Only
+                </span>
+              )}
+            </label>
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => updateActiveDraft({ paymentMode: 'FULL' })}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all cursor-pointer ${
+                  paymentMode === 'FULL'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Banknote className="w-4 h-4" />
+                <span>Cash / Paid</span>
+              </button>
+              <button
+                type="button"
+                disabled={!selectedCustomerId}
+                onClick={() => {
+                  if (!selectedCustomerId) {
+                    showError('Please select a customer first to enable Credit / Khata (Press F2)');
+                    customerInputRef.current?.focus();
+                    return;
+                  }
+                  updateActiveDraft({ paymentMode: 'UNPAID' });
+                }}
+                title={!selectedCustomerId ? 'Select a registered customer first to enable Credit / Khata' : undefined}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all ${
+                  !selectedCustomerId
+                    ? 'opacity-40 cursor-not-allowed text-slate-400'
+                    : paymentMode === 'UNPAID'
+                    ? 'bg-amber-600 text-white shadow-2xs cursor-pointer'
+                    : 'text-slate-600 hover:text-slate-900 cursor-pointer'
+                }`}
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>Credit / Khata</span>
+              </button>
+              <button
+                type="button"
+                disabled={!selectedCustomerId}
+                onClick={() => {
+                  if (!selectedCustomerId) {
+                    showError('Please select a registered customer first to enable Partial payment (Press F2)');
+                    customerInputRef.current?.focus();
+                    return;
+                  }
+                  updateActiveDraft({
+                    paymentMode: 'PARTIAL',
+                    customPaidAmount: customPaidAmount || String(Math.floor(remainingAfterCredit / 2)),
+                  });
+                }}
+                title={!selectedCustomerId ? 'Select a registered customer first to enable Partial payment' : undefined}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all ${
+                  !selectedCustomerId
+                    ? 'opacity-40 cursor-not-allowed text-slate-400'
+                    : paymentMode === 'PARTIAL'
+                    ? 'bg-slate-900 text-white shadow-2xs cursor-pointer'
+                    : 'text-slate-600 hover:text-slate-900 cursor-pointer'
+                }`}
+              >
+                <Split className="w-4 h-4" />
+                <span>Partial</span>
+              </button>
             </div>
+          </div>
 
-            {/* Item Search Bar */}
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search products or services..."
-                value={itemSearchQuery}
-                onChange={(e) => setItemSearchQuery(e.target.value)}
-                className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white"
-              />
-            </div>
-
-            {/* Items Grid for Fast Tapping */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto pr-1">
-              {filteredCatalog.map((item) => {
-                const inCart = cart.find((l) => l.itemId === item.id);
-                const isOutOfStock = item.trackInventory && item.currentStock <= 0;
-
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    disabled={isOutOfStock}
-                    onClick={() => handleAddToCart(item)}
-                    className={`p-3 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
-                      isOutOfStock
-                        ? 'opacity-40 bg-slate-50 border-slate-200 cursor-not-allowed'
-                        : inCart
-                        ? 'bg-blue-50/70 border-blue-300 hover:border-blue-400'
-                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-1">
-                        <span className="text-xs font-bold text-slate-900 line-clamp-2 leading-tight">
-                          {item.name}
-                        </span>
-                        {inCart && (
-                          <span className="bg-blue-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shrink-0">
-                            {inCart.quantity}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[11px] text-slate-400 block mt-0.5">
-                        {item.category || item.unit}
-                      </span>
-                    </div>
-
-                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-xs font-bold font-mono text-slate-900">
-                        {formatCurrency(item.sellingPrice, business?.currencySymbol)}
-                      </span>
-                      {item.trackInventory ? (
-                        <span
-                          className={`text-[10px] font-mono font-semibold ${
-                            item.currentStock <= 0
-                              ? 'text-rose-600'
-                              : item.isLowStock
-                              ? 'text-amber-600'
-                              : 'text-slate-500'
-                          }`}
-                        >
-                          {item.currentStock} left
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-slate-400">Service</span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
+          {/* Invoice Date */}
+          <div className="text-right hidden sm:block">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1.5">
+              Invoice Date
+            </label>
+            <div className="flex items-center justify-end gap-1.5 text-xs font-mono font-bold text-slate-700 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <span>{new Date().toLocaleDateString()}</span>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Right Column: Invoice Cart, Totals & Payment (5 cols) */}
-        <div className="lg:col-span-5 space-y-5">
-          <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-5">
-            {/* Cart Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <ShoppingCart className="w-4 h-4 text-blue-600" />
-                Cart Items ({cart.length})
-              </h3>
-              {cart.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setCart([])}
-                  className="text-xs text-rose-600 hover:text-rose-700 font-medium"
-                >
-                  Clear Cart
-                </button>
-              )}
-            </div>
+      {/* 3. Full-Width Spreadsheet Grid Canvas */}
+      <SpreadsheetInvoiceGrid
+        cart={cart}
+        items={items}
+        currencySymbol={business?.currencySymbol}
+        enableExpiryTracking={business?.enableExpiryTracking}
+        businessId={business?.id}
+        onUpdateCart={(newCart) => updateActiveDraft({ cart: newCart })}
+        onItemRestocked={(updatedItem) => {
+          setItems((prev) =>
+            prev.map((it) => (it.id === updatedItem.id ? updatedItem : it))
+          );
+        }}
+      />
 
-            {/* Cart Items List */}
-            {cart.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 text-xs">
-                <Package className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                No items added yet. Click on any item on the left to add to bill.
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-72 overflow-y-auto divide-y divide-slate-100 pr-1">
-                {cart.map((line) => {
-                  const hasStockWarning = line.trackInventory && line.quantity > line.availableStock;
-                  const lineGross = line.quantity * line.rate;
-                  const lineNet = Math.max(0, lineGross - (line.discountAmount || 0));
-
-                  return (
-                    <div key={line.itemId} className="pt-3 first:pt-0 space-y-2">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <span className="text-xs font-bold text-slate-900 block">{line.name}</span>
-                          <span className="text-[11px] text-slate-400 font-mono">
-                            {formatCurrency(line.rate, business?.currencySymbol)} / {line.unit}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-xs font-bold font-mono text-slate-900">
-                            {formatCurrency(lineNet, business?.currencySymbol)}
-                          </span>
-                          {line.discountAmount > 0 && (
-                            <span className="text-[10px] text-slate-400 line-through block font-mono">
-                              {formatCurrency(lineGross, business?.currencySymbol)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Quantity & Actions Bar */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQuantity(line.itemId, line.quantity - 1)}
-                            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center active:scale-95 transition-all"
-                            aria-label="Decrease quantity"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <input
-                            type="number"
-                            min="1"
-                            value={line.quantity}
-                            onChange={(e) =>
-                              handleUpdateQuantity(line.itemId, Math.max(1, parseInt(e.target.value) || 1))
-                            }
-                            className="w-12 h-7 text-center font-bold text-xs border border-slate-200 rounded-lg bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQuantity(line.itemId, line.quantity + 1)}
-                            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center active:scale-95 transition-all"
-                            aria-label="Increase quantity"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="text-xs text-slate-500 ml-1">{line.unit}</span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveLine(line.itemId)}
-                          className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
-                          title="Remove item"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      {/* Line Discount Selector */}
-                      <div className="flex items-center justify-between gap-1.5 pt-1 bg-slate-50/70 p-1.5 rounded-lg border border-slate-100">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] text-slate-500 font-medium">Disc:</span>
-                          <div className="inline-flex rounded-md border border-slate-200 bg-slate-200/60 p-0.5 text-[10px]">
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateLineDiscount(line.itemId, 'NONE', 0)}
-                              className={`px-1.5 py-0.5 rounded font-medium ${
-                                line.discountType === 'NONE' || !line.discountType
-                                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
-                                  : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                            >
-                              None
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateLineDiscount(
-                                  line.itemId,
-                                  'PERCENTAGE',
-                                  line.discountValue || 10
-                                )
-                              }
-                              className={`px-1.5 py-0.5 rounded font-medium ${
-                                line.discountType === 'PERCENTAGE'
-                                  ? 'bg-blue-600 text-white shadow-2xs font-bold'
-                                  : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                            >
-                              %
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateLineDiscount(
-                                  line.itemId,
-                                  'FLAT',
-                                  line.discountValue || 10
-                                )
-                              }
-                              className={`px-1.5 py-0.5 rounded font-medium ${
-                                line.discountType === 'FLAT'
-                                  ? 'bg-blue-600 text-white shadow-2xs font-bold'
-                                  : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                            >
-                              ₹
-                            </button>
-                          </div>
-
-                          {line.discountType && line.discountType !== 'NONE' && (
-                            <input
-                              type="number"
-                              min="0"
-                              max={line.discountType === 'PERCENTAGE' ? 100 : undefined}
-                              value={line.discountValue || ''}
-                              onChange={(e) =>
-                                handleUpdateLineDiscount(
-                                  line.itemId,
-                                  line.discountType || 'NONE',
-                                  Math.max(0, parseFloat(e.target.value) || 0)
-                                )
-                              }
-                              placeholder={line.discountType === 'PERCENTAGE' ? '%' : '₹'}
-                              className="w-16 h-6 px-1 text-right text-xs font-mono font-semibold border border-blue-300 rounded bg-white"
-                            />
-                          )}
-                        </div>
-
-                        {line.discountAmount > 0 && (
-                          <span className="text-[11px] text-emerald-600 font-semibold font-mono">
-                            -{formatCurrency(line.discountAmount, business?.currencySymbol)}
-                          </span>
-                        )}
-                      </div>
-
-                      {hasStockWarning && (
-                        <p className="text-[11px] font-semibold text-rose-600 flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3" />
-                          Only {line.availableStock} {line.unit} available in stock!
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Step 3: Payment Status Controls */}
-            <div className="pt-3 border-t border-slate-200 space-y-3">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                {creditToApply > 0 ? 'Remaining Payment' : 'Payment Status'}
-              </label>
-
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMode('FULL')}
-                  className={`py-2 rounded-xl text-xs font-bold transition-all ${
-                    paymentMode === 'FULL'
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Pay in Full
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMode('UNPAID')}
-                  className={`py-2 rounded-xl text-xs font-bold transition-all ${
-                    paymentMode === 'UNPAID'
-                      ? 'bg-rose-600 text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Credit / Due
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPaymentMode('PARTIAL');
-                    if (!customPaidAmount) setCustomPaidAmount(String(Math.floor(remainingAfterCredit / 2)));
-                  }}
-                  className={`py-2 rounded-xl text-xs font-bold transition-all ${
-                    paymentMode === 'PARTIAL'
-                      ? 'bg-amber-600 text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Partial
-                </button>
-              </div>
-
-              {paymentMode === 'PARTIAL' && (
-                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-amber-900">Direct Paid Now:</span>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      max={remainingAfterCredit}
-                      placeholder="0.00"
-                      value={customPaidAmount}
-                      onChange={(e) => setCustomPaidAmount(e.target.value)}
-                      className="w-28 h-8 px-2 rounded-lg border border-amber-300 bg-white text-right text-xs font-mono font-bold text-slate-900"
-                    />
-                  </div>
-                  <div className="flex justify-between text-xs font-bold text-amber-900 pt-1 border-t border-amber-200">
-                    <span>Remaining Due:</span>
-                    <span className="font-mono">{formatCurrency(dueAmount, business?.currencySymbol)}</span>
-                  </div>
-                </div>
-              )}
-
-              {paymentMode !== 'UNPAID' && directPaidAmount > 0 && (
-                <div className="space-y-2 pt-1">
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="text-slate-500 font-medium">Payment Mode:</span>
+      {/* 4. Bottom Settlement & Notes Compact Canvas */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 sm:p-5">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Left Side: Payment Details & Tender (7 cols) */}
+          <div className="lg:col-span-7 space-y-3">
+            {/* Payment Method & Deposit Account (When direct paid amount > 0) */}
+            {paymentMode !== 'UNPAID' && directPaidAmount > 0 ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                      Payment Mode
+                    </label>
                     <select
                       value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                      className="h-8 px-2 rounded-lg border border-slate-200 bg-white text-slate-800 text-xs font-medium"
+                      onChange={(e) => updateActiveDraft({ paymentMethod: e.target.value as PaymentMethod })}
+                      className="w-full h-8 px-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs font-medium cursor-pointer"
                     >
                       <option value="CASH">Cash</option>
                       <option value="UPI">UPI / QR Code</option>
@@ -870,12 +688,14 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
                     </select>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="text-slate-500 font-medium">Deposit Account:</span>
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                      Deposit Account
+                    </label>
                     <select
                       value={financialAccountId}
-                      onChange={(e) => setFinancialAccountId(e.target.value)}
-                      className="h-8 px-2 rounded-lg border border-slate-200 bg-white text-slate-800 text-xs font-medium max-w-[180px] truncate"
+                      onChange={(e) => updateActiveDraft({ financialAccountId: e.target.value })}
+                      className="w-full h-8 px-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs font-medium cursor-pointer"
                     >
                       {accounts.map((acc) => (
                         <option key={acc.id} value={acc.id}>
@@ -885,7 +705,254 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
                     </select>
                   </div>
                 </div>
+
+                {/* Cash Tender & Live Change Return */}
+                {paymentMethod === 'CASH' && (
+                  <div className="p-2.5 sm:p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-slate-700">Cash Received / Tendered:</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-mono text-slate-500">{business?.currencySymbol || '₹'}</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          step="any"
+                          min="0"
+                          placeholder={String(directPaidAmount)}
+                          value={cashTenderAmount}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => updateActiveDraft({ cashTenderAmount: e.target.value })}
+                          className="w-24 h-7 px-2 rounded-lg border border-slate-300 bg-white text-right text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Tender Preset Chips */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-1">Quick:</span>
+                      {getCashTenderPresets(directPaidAmount).map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => updateActiveDraft({ cashTenderAmount: String(preset) })}
+                          className={`px-2 py-0.5 rounded-md text-xs font-mono font-bold border transition-all cursor-pointer ${
+                            tenderNumber === preset
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {preset === directPaidAmount ? 'Exact' : `${business?.currencySymbol || '₹'}${preset}`}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Live Change Returned Banner */}
+                    {changeDue > 0 && (
+                      <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs font-bold text-emerald-800 animate-in fade-in">
+                        <span className="flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                          Change to Return:
+                        </span>
+                        <span className="text-sm font-mono text-emerald-900">
+                          {formatCurrency(changeDue, business?.currencySymbol)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : paymentMode === 'UNPAID' ? (
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Full invoice amount of <strong>{formatCurrency(grandTotal, business?.currencySymbol)}</strong> will be credited to customer&apos;s Khata balance.</span>
+              </div>
+            ) : null}
+
+            {/* Collapsible / Sleek Notes Section */}
+            <div className="pt-1">
+              {!isNotesExpanded && !saleNotes ? (
+                <button
+                  type="button"
+                  onClick={() => setIsNotesExpanded(true)}
+                  className="text-xs text-slate-500 hover:text-blue-600 font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>+ Add Notes / Terms / Delivery instructions</span>
+                </button>
+              ) : (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                      <FileText className="w-3 h-3 text-slate-400" />
+                      Invoice Notes
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsNotesExpanded(false)}
+                      className="text-[11px] text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      Hide
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Add terms, remarks, delivery notes, or customer instructions..."
+                    value={saleNotes}
+                    onChange={(e) => updateActiveDraft({ notes: e.target.value })}
+                    className="w-full h-8 px-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-800 text-xs focus:ring-2 focus:ring-blue-600 focus:bg-white focus:outline-hidden"
+                  />
+                </div>
               )}
+            </div>
+          </div>
+
+          {/* Right Side: Financial Breakdown & Complete Sale Action (5 cols) */}
+          <div className="lg:col-span-5 space-y-3 bg-slate-50/80 p-3.5 sm:p-4 rounded-xl border border-slate-200/80">
+            <div className="space-y-1.5 text-xs">
+              <div className="flex justify-between text-slate-600">
+                <span>Gross Items Subtotal</span>
+                <span className="font-mono font-semibold">
+                  {formatCurrency(grossItemsSubtotal, business?.currencySymbol)}
+                </span>
+              </div>
+
+              {totalLineDiscounts > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>Item Discounts</span>
+                  <span className="font-mono font-semibold">
+                    -{formatCurrency(totalLineDiscounts, business?.currencySymbol)}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex justify-between text-slate-700 font-medium">
+                <span>Subtotal</span>
+                <span className="font-mono font-semibold">
+                  {formatCurrency(subtotal, business?.currencySymbol)}
+                </span>
+              </div>
+
+              {/* Overall Discount Controls */}
+              <div className="flex items-center justify-between gap-2 py-0.5">
+                <span className="text-slate-600 font-medium">Bill Discount</span>
+                <div className="flex items-center gap-1">
+                  <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActiveDraft({
+                          overallDiscountType: 'NONE',
+                          overallDiscountValue: '',
+                        });
+                      }}
+                      className={`px-1.5 py-0.5 rounded font-medium cursor-pointer ${
+                        overallDiscountType === 'NONE'
+                          ? 'bg-slate-900 text-white shadow-2xs font-bold'
+                          : 'text-slate-600'
+                      }`}
+                    >
+                      None
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActiveDraft({
+                          overallDiscountType: 'PERCENTAGE',
+                          overallDiscountValue: overallDiscountValue || '5',
+                        });
+                      }}
+                      className={`px-1.5 py-0.5 rounded font-medium cursor-pointer ${
+                        overallDiscountType === 'PERCENTAGE'
+                          ? 'bg-blue-600 text-white shadow-2xs font-bold'
+                          : 'text-slate-600'
+                      }`}
+                    >
+                      %
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActiveDraft({
+                          overallDiscountType: 'FLAT',
+                          overallDiscountValue: overallDiscountValue || '50',
+                        });
+                      }}
+                      className={`px-1.5 py-0.5 rounded font-medium cursor-pointer ${
+                        overallDiscountType === 'FLAT'
+                          ? 'bg-blue-600 text-white shadow-2xs font-bold'
+                          : 'text-slate-600'
+                      }`}
+                    >
+                      ₹
+                    </button>
+                  </div>
+
+                  {overallDiscountType !== 'NONE' && (
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      max={overallDiscountType === 'PERCENTAGE' ? 100 : undefined}
+                      placeholder="0"
+                      value={overallDiscountValue}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => updateActiveDraft({ overallDiscountValue: e.target.value })}
+                      className="w-16 h-6 px-1.5 rounded-md border border-blue-300 bg-white text-right text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {transactionCalc.overallDiscountAmount > 0 && (
+                <div className="flex justify-between text-emerald-700 font-semibold">
+                  <span>
+                    Overall Discount ({overallDiscountType === 'PERCENTAGE' ? `${overallDiscountValue}%` : 'Flat'})
+                  </span>
+                  <span className="font-mono">
+                    -{formatCurrency(transactionCalc.overallDiscountAmount, business?.currencySymbol)}
+                  </span>
+                </div>
+              )}
+
+              {creditToApply > 0 && (
+                <div className="flex justify-between text-blue-700 font-semibold">
+                  <span>Customer Credit Applied:</span>
+                  <span className="font-mono">-{formatCurrency(creditToApply, business?.currencySymbol)}</span>
+                </div>
+              )}
+
+              {/* Partial Payment Amount breakdown */}
+              {paymentMode === 'PARTIAL' && (
+                <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 space-y-1 mt-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-amber-900">Direct Paid Now:</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      min="0"
+                      max={remainingAfterCredit}
+                      placeholder="0.00"
+                      value={customPaidAmount}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => updateActiveDraft({ customPaidAmount: e.target.value })}
+                      className="w-24 h-6 px-1.5 rounded border border-amber-300 bg-white text-right text-xs font-mono font-bold text-slate-900"
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs font-bold text-amber-900 pt-1 border-t border-amber-200">
+                    <span>Balance to Khata (Due):</span>
+                    <span className="font-mono">{formatCurrency(dueAmount, business?.currencySymbol)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Grand Total */}
+              <div className="flex justify-between text-sm font-bold text-slate-900 pt-2 border-t border-slate-200">
+                <span>Total Bill Amount</span>
+                <span className="font-mono text-lg text-blue-600 font-extrabold">
+                  {formatCurrency(grandTotal, business?.currencySymbol)}
+                </span>
+              </div>
             </div>
 
             {/* Complete Sale Button */}
@@ -894,13 +961,16 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
               variant="success"
               size="lg"
               fullWidth
-              disabled={cart.length === 0 || isSubmitting}
+              disabled={validCartLines.length === 0 || isSubmitting}
               isLoading={isSubmitting}
               icon={Sparkles}
               onClick={handleCompleteSale}
-              className="py-3.5 text-base font-bold shadow-md"
+              className="py-3 text-sm sm:text-base font-bold shadow-md cursor-pointer flex items-center justify-center gap-2"
             >
-              Complete Sale ({formatCurrency(grandTotal, business?.currencySymbol)})
+              <span>Complete & Save ({formatCurrency(grandTotal, business?.currencySymbol)})</span>
+              <kbd className="hidden sm:inline bg-emerald-700/60 text-white text-[11px] px-1.5 py-0.5 rounded font-mono font-semibold">
+                F4
+              </kbd>
             </Button>
           </div>
         </div>

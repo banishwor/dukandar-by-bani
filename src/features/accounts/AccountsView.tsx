@@ -7,12 +7,16 @@ import { AccountFormModal } from './AccountFormModal';
 import { AccountTransferModal } from './AccountTransferModal';
 import { AccountDetailModal } from './AccountDetailModal';
 import { ReverseTransferModal } from './ReverseTransferModal';
+import { DailyGallaModal } from './DailyGallaModal';
+import { EODReceiptModal } from './EODReceiptModal';
 import { financialAccountService } from '../../services/financialAccountService';
 import { accountTransferService } from '../../services/accountTransferService';
+import { cashDrawerService, type DrawerLiveStatus } from '../../services/cashDrawerService';
 import type {
   FinancialAccount,
   FinancialAccountWithBalance,
   AccountTransferWithDetails,
+  CashDrawerSession,
 } from '../../types';
 import { formatCurrency, formatDate, formatDateTime } from '../../utils/formatters';
 import {
@@ -28,8 +32,14 @@ import {
   Star,
   ChevronRight,
   TrendingUp,
+  TrendingDown,
   Layers,
   Building,
+  Coins,
+  Receipt,
+  Calendar,
+  Printer,
+  CheckCircle2,
 } from 'lucide-react';
 
 export const AccountsView: React.FC = () => {
@@ -38,7 +48,9 @@ export const AccountsView: React.FC = () => {
 
   const [accounts, setAccounts] = useState<FinancialAccountWithBalance[]>([]);
   const [transfers, setTransfers] = useState<AccountTransferWithDetails[]>([]);
-  const [activeTab, setActiveTab] = useState<'ACCOUNTS' | 'TRANSFERS'>('ACCOUNTS');
+  const [gallaSessions, setGallaSessions] = useState<CashDrawerSession[]>([]);
+  const [gallaLiveStatus, setGallaLiveStatus] = useState<DrawerLiveStatus | null>(null);
+  const [activeTab, setActiveTab] = useState<'ACCOUNTS' | 'TRANSFERS' | 'GALLA'>('ACCOUNTS');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -49,17 +61,23 @@ export const AccountsView: React.FC = () => {
   const [initialFromAccountId, setInitialFromAccountId] = useState<string | undefined>(undefined);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [transferToReverse, setTransferToReverse] = useState<AccountTransferWithDetails | null>(null);
+  const [isGallaModalOpen, setIsGallaModalOpen] = useState(false);
+  const [selectedEODSession, setSelectedEODSession] = useState<CashDrawerSession | null>(null);
 
   const loadData = useCallback(async () => {
     if (!business) return;
     setLoading(true);
     try {
-      const [accs, trfs] = await Promise.all([
+      const [accs, trfs, sessions, live] = await Promise.all([
         financialAccountService.getAccountsWithBalance(business.id),
         accountTransferService.getTransfers(business.id),
+        cashDrawerService.getPastSessions(business.id),
+        cashDrawerService.getDrawerLiveStatus(business.id).catch(() => null),
       ]);
       setAccounts(accs);
       setTransfers(trfs);
+      setGallaSessions(sessions);
+      setGallaLiveStatus(live);
     } catch (err: any) {
       showError(err.message || 'Failed to load accounts');
     } finally {
@@ -92,6 +110,21 @@ export const AccountsView: React.FC = () => {
     t.transfer.transferNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.transfer.fromAccountNameSnapshot.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.transfer.toAccountNameSnapshot.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Deduplicate sessions by calendar date (one-per-day rule, showing latest updated session)
+  const uniqueSessionsMap = new Map<string, CashDrawerSession>();
+  for (const s of gallaSessions) {
+    if (!uniqueSessionsMap.has(s.sessionDate)) {
+      uniqueSessionsMap.set(s.sessionDate, s);
+    }
+  }
+  const uniqueGallaSessions = Array.from(uniqueSessionsMap.values());
+
+  const filteredGallaSessions = uniqueGallaSessions.filter((s) =>
+    s.sessionNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.sessionDate.includes(searchQuery) ||
+    (s.notes && s.notes.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const getAccountIcon = (type: string) => {
@@ -134,12 +167,46 @@ export const AccountsView: React.FC = () => {
             <ArrowRightLeft className="w-4 h-4 mr-1.5" />
             Transfer Funds
           </Button>
+
+          {gallaLiveStatus?.isClosedToday ? (
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="secondary"
+                onClick={() => setSelectedEODSession(gallaLiveStatus.todaySession || null)}
+                className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 text-xs"
+                title="View Today's Z-Report"
+              >
+                <Receipt className="w-4 h-4 mr-1.5" />
+                Today&apos;s Z-Report
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => setIsGallaModalOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 text-xs"
+                title="Re-close & Update Today's Galla"
+              >
+                <RotateCcw className="w-4 h-4 mr-1.5" />
+                Update Galla
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="primary"
+              onClick={() => setIsGallaModalOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20"
+            >
+              <Wallet className="w-4 h-4 mr-1.5" />
+              Close Galla
+            </Button>
+          )}
+
           <Button
-            variant="primary"
+            variant="secondary"
             onClick={() => {
               setAccountToEdit(null);
               setIsAccountModalOpen(true);
             }}
+            className="border-slate-700 text-slate-300 hover:text-white"
           >
             <Plus className="w-4 h-4 mr-1.5" />
             Add Account
@@ -209,13 +276,27 @@ export const AccountsView: React.FC = () => {
           >
             Transfers ({transfers.length})
           </button>
+          <button
+            onClick={() => setActiveTab('GALLA')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'GALLA'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            Daily Galla ({gallaSessions.length})
+          </button>
         </div>
 
         <div className="relative w-full sm:w-64">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search accounts or transfers..."
+            placeholder={
+              activeTab === 'GALLA'
+                ? 'Search galla sessions...'
+                : 'Search accounts or transfers...'
+            }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -279,9 +360,42 @@ export const AccountsView: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1 text-xs text-blue-400 font-semibold group-hover:translate-x-0.5 transition-transform">
-                    <span>View Ledger</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-2">
+                    {acc.type === 'CASH' && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsGallaModalOpen(true);
+                        }}
+                        className={`px-2 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition-all ${
+                          gallaLiveStatus?.isClosedToday
+                            ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
+                            : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'
+                        }`}
+                        title={
+                          gallaLiveStatus?.isClosedToday
+                            ? "Galla closed today. Click to re-close / update"
+                            : "Count & Close Cash Drawer"
+                        }
+                      >
+                        {gallaLiveStatus?.isClosedToday ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Closed</span>
+                          </>
+                        ) : (
+                          <>
+                            <Coins className="w-3.5 h-3.5" />
+                            <span>Galla</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                    <div className="flex items-center gap-1 text-xs text-blue-400 font-semibold group-hover:translate-x-0.5 transition-transform">
+                      <span>View Ledger</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -373,6 +487,201 @@ export const AccountsView: React.FC = () => {
         </div>
       )}
 
+      {/* Daily Galla Tab */}
+      {activeTab === 'GALLA' && (
+        <div className="space-y-6">
+          {/* Live Drawer Status Banner */}
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/20 shadow-lg">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full ${
+                      gallaLiveStatus?.isClosedToday ? 'bg-emerald-400' : 'bg-emerald-400 animate-pulse'
+                    }`}
+                  />
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                    {gallaLiveStatus?.isClosedToday
+                      ? "Today's Galla Closed (1-per-day)"
+                      : 'Live Cash Drawer Status (Active Session)'}
+                  </span>
+                  {gallaLiveStatus?.isClosedToday && gallaLiveStatus.todaySession && (
+                    <Badge variant="success" className="text-[10px]">
+                      {gallaLiveStatus.todaySession.sessionNumber} • {formatDateTime(gallaLiveStatus.todaySession.closedAt)}
+                    </Badge>
+                  )}
+                </div>
+                <h3 className="text-xl font-black text-white">
+                  Expected Drawer Cash: {formatCurrency(gallaLiveStatus?.expectedDrawerCash || cashTotal)}
+                </h3>
+                <p className="text-xs text-slate-400 max-w-xl">
+                  {gallaLiveStatus?.isClosedToday
+                    ? "Galla was closed earlier today. If you made more sales or received cash, click 'Re-close & Update' to refresh today's single Z-Report."
+                    : 'Computed in real-time from opening float + cash sales, khata collections, expenses, and withdrawals. Register operates continuously without blocking sales.'}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="px-3.5 py-2 rounded-xl bg-slate-800/80 border border-slate-700">
+                  <span className="text-[10px] text-slate-400 font-semibold uppercase block">
+                    Starting Float
+                  </span>
+                  <span className="text-sm font-black text-slate-200">
+                    {formatCurrency(gallaLiveStatus?.openingFloat || 0)}
+                  </span>
+                </div>
+                <div className="px-3.5 py-2 rounded-xl bg-slate-800/80 border border-slate-700">
+                  <span className="text-[10px] text-emerald-400 font-semibold uppercase block">
+                    + Inflows
+                  </span>
+                  <span className="text-sm font-black text-emerald-400">
+                    +{formatCurrency(gallaLiveStatus?.totalCashIn || 0)}
+                  </span>
+                </div>
+                <div className="px-3.5 py-2 rounded-xl bg-slate-800/80 border border-slate-700">
+                  <span className="text-[10px] text-rose-400 font-semibold uppercase block">
+                    - Outflows
+                  </span>
+                  <span className="text-sm font-black text-rose-400">
+                    -{formatCurrency(gallaLiveStatus?.totalCashOut || 0)}
+                  </span>
+                </div>
+
+                {gallaLiveStatus?.isClosedToday ? (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setSelectedEODSession(gallaLiveStatus.todaySession || null)}
+                      className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 font-bold px-3 py-2 text-xs"
+                    >
+                      <Receipt className="w-4 h-4 mr-1.5" />
+                      View Z-Report
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={() => setIsGallaModalOpen(true)}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-2 text-xs shadow-lg shadow-emerald-600/30"
+                    >
+                      <RotateCcw className="w-4 h-4 mr-1.5" />
+                      Re-close & Update
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="primary"
+                    onClick={() => setIsGallaModalOpen(true)}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 shadow-lg shadow-emerald-600/30"
+                  >
+                    <Coins className="w-4 h-4 mr-1.5" />
+                    Count & Close Galla
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Past Galla Closures Table */}
+          <div className="rounded-2xl border border-slate-700/80 bg-slate-900/60 overflow-hidden shadow-lg">
+            <div className="p-4 bg-slate-800/60 border-b border-slate-700/80 flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-emerald-400" />
+                  Past Cash Drawer Closures & Z-Reports
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Historical record of all physical register counts, discrepancy audits, and float rollovers.
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                {filteredGallaSessions.length} Closed Sessions
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-800/80 text-slate-400 font-semibold border-b border-slate-700">
+                  <tr>
+                    <th className="py-3 px-4">Session #</th>
+                    <th className="py-3 px-4">Date & Time</th>
+                    <th className="py-3 px-4 text-right">Start Float</th>
+                    <th className="py-3 px-4 text-right">Expected</th>
+                    <th className="py-3 px-4 text-right">Counted</th>
+                    <th className="py-3 px-4 text-center">Discrepancy</th>
+                    <th className="py-3 px-4 text-right">Next Float</th>
+                    <th className="py-3 px-4 text-right">Take-Home</th>
+                    <th className="py-3 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 text-slate-300">
+                  {filteredGallaSessions.map((session) => {
+                    const diff = session.difference || 0;
+                    return (
+                      <tr key={session.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4 font-bold text-white whitespace-nowrap">
+                          {session.sessionNumber}
+                        </td>
+                        <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
+                          {formatDateTime(session.closedAt)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-medium text-slate-300 whitespace-nowrap">
+                          {formatCurrency(session.openingFloat)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-medium text-slate-300 whitespace-nowrap">
+                          {formatCurrency(session.expectedCash)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-black text-white whitespace-nowrap">
+                          {formatCurrency(session.countedCash)}
+                        </td>
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          {diff === 0 ? (
+                            <Badge variant="success" className="text-[10px]">
+                              Exact ₹0
+                            </Badge>
+                          ) : diff > 0 ? (
+                            <Badge variant="info" className="text-[10px]">
+                              Surplus +{formatCurrency(diff)}
+                            </Badge>
+                          ) : (
+                            <Badge variant="danger" className="text-[10px]">
+                              Shortage {formatCurrency(diff)}
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-amber-300 whitespace-nowrap">
+                          {formatCurrency(session.nextDayFloat || 0)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-emerald-300 whitespace-nowrap">
+                          {formatCurrency(session.takeHomeCash || 0)}
+                        </td>
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setSelectedEODSession(session)}
+                            className="text-emerald-400 hover:text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/10"
+                          >
+                            <Printer className="w-3.5 h-3.5 mr-1" />
+                            Z-Report
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {filteredGallaSessions.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-slate-400">
+                        No galla closures recorded yet. Click &quot;Count & Close Galla&quot; to perform your first register close.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Account Modals */}
       <AccountFormModal
         isOpen={isAccountModalOpen}
@@ -409,6 +718,28 @@ export const AccountsView: React.FC = () => {
         businessId={business.id}
         transferDetails={transferToReverse}
         onReversed={loadData}
+      />
+
+      {/* Daily Galla Modals */}
+      <DailyGallaModal
+        isOpen={isGallaModalOpen}
+        onClose={() => setIsGallaModalOpen(false)}
+        businessId={business.id}
+        onClosed={(session) => {
+          loadData();
+          setSelectedEODSession(session);
+        }}
+        onViewEODReport={(session) => {
+          setSelectedEODSession(session);
+        }}
+      />
+
+      <EODReceiptModal
+        isOpen={Boolean(selectedEODSession)}
+        onClose={() => setSelectedEODSession(null)}
+        session={selectedEODSession}
+        businessId={business.id}
+        businessName={business.name}
       />
     </div>
   );

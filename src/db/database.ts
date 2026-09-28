@@ -30,6 +30,7 @@ import type {
   ExpenseReversal,
   AccountTransfer,
   AccountTransferReversal,
+  CashDrawerSession,
   AppSettings,
   SyncMetadata,
 } from '../types';
@@ -66,6 +67,7 @@ export class BusinessAppDatabase extends Dexie {
   expenseReversals!: Table<ExpenseReversal, string>;
   accountTransfers!: Table<AccountTransfer, string>;
   accountTransferReversals!: Table<AccountTransferReversal, string>;
+  cashDrawerSessions!: Table<CashDrawerSession, string>;
   appSettings!: Table<AppSettings, string>;
   syncMetadata!: Table<SyncMetadata, string>;
 
@@ -270,6 +272,12 @@ export class BusinessAppDatabase extends Dexie {
           }
         }
       });
+
+    // Version 7: Phase 2 Daily Cash Drawer (Galla Close) Sessions
+    this.version(7).stores({
+      cashDrawerSessions:
+        'id, businessId, sessionNumber, sessionDate, financialAccountId, isDeleted, createdAt',
+    });
   }
 }
 

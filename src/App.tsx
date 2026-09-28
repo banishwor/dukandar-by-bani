@@ -24,6 +24,19 @@ const MainAppContent: React.FC = () => {
   const [targetSaleId, setTargetSaleId] = useState<string | null>(null);
   const [targetPurchaseId, setTargetPurchaseId] = useState<string | null>(null);
 
+  // Global keyboard shortcut: Ctrl+S or Cmd+S to launch New Sale from anywhere
+  React.useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        setCurrentTab('NEW_SALE');
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white p-4">

@@ -16,6 +16,10 @@ import {
   Clock,
   ExternalLink,
   Filter,
+  TrendingUp,
+  Wallet,
+  Calendar,
+  CreditCard,
 } from 'lucide-react';
 
 interface SalesViewProps {
@@ -81,19 +85,109 @@ export const SalesView: React.FC<SalesViewProps> = ({
     (s) => (s.saleDate || s.createdAt).slice(0, 10) !== todayStr && (s.saleDate || s.createdAt).slice(0, 10) !== yesterdayStr
   );
 
+  // Executive KPI Calculations
+  const validSales = sales.filter((s) => s.status !== 'VOIDED');
+  const todaySales = validSales.filter(
+    (s) => (s.saleDate || s.createdAt).slice(0, 10) === todayStr
+  );
+  const todayRevenue = todaySales.reduce((sum, s) => sum + s.totalAmount, 0);
+  const todayCollected = todaySales.reduce((sum, s) => sum + s.paidAmount, 0);
+  const totalKhataDue = validSales.reduce((sum, s) => sum + Math.max(0, s.dueAmount || 0), 0);
+  const unpaidCount = validSales.filter((s) => s.status === 'UNPAID' || s.status === 'PARTIAL').length;
+
   return (
     <div className="space-y-6 pb-12">
-      {/* Header */}
+      {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Sales & Invoices</h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Full history of your transactions saved locally on this device.
+            Track daily revenue, issue receipts, and manage outstanding khata balances.
           </p>
         </div>
         <Button variant="primary" icon={Plus} onClick={onNewSaleClick} className="shadow-sm">
           + New Sale
         </Button>
+      </div>
+
+      {/* 2. Executive KPI Metrics Bar */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Today's Sales */}
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+              Today's Sales
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-black font-mono text-slate-900">
+            {formatCurrency(todayRevenue, business?.currencySymbol)}
+          </div>
+          <p className="text-[11px] text-slate-400">
+            {todaySales.length} invoice{todaySales.length === 1 ? '' : 's'} created today
+          </p>
+        </div>
+
+        {/* Collected Today */}
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+              Collected Today
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+              <Wallet className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-black font-mono text-slate-900">
+            {formatCurrency(todayCollected, business?.currencySymbol)}
+          </div>
+          <p className="text-[11px] text-slate-400">Cash and digital receipts collected</p>
+        </div>
+
+        {/* Khata Receivables / Due */}
+        <div
+          onClick={() => setStatusFilter(statusFilter === 'UNPAID' ? 'ALL' : 'UNPAID')}
+          className={`p-4 rounded-2xl border shadow-2xs space-y-1 transition-all cursor-pointer ${
+            statusFilter === 'UNPAID' || statusFilter === 'PARTIAL'
+              ? 'ring-2 ring-amber-500 bg-amber-50/80 border-amber-300'
+              : totalKhataDue > 0
+              ? 'bg-amber-50/30 border-amber-200 hover:bg-amber-50'
+              : 'bg-white border-slate-200'
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+              Outstanding Khata Due
+            </span>
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${totalKhataDue > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'}`}>
+              <AlertCircle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className={`text-xl sm:text-2xl font-black font-mono ${totalKhataDue > 0 ? 'text-amber-900' : 'text-slate-900'}`}>
+            {formatCurrency(totalKhataDue, business?.currencySymbol)}
+          </div>
+          <p className="text-[11px] text-slate-400">
+            {unpaidCount} unpaid/partial invoice{unpaidCount === 1 ? '' : 's'}
+          </p>
+        </div>
+
+        {/* Total Invoices Count */}
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+              Total Invoices
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Receipt className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-black font-mono text-slate-900">
+            {validSales.length}
+          </div>
+          <p className="text-[11px] text-slate-400">All-time recorded invoices</p>
+        </div>
       </div>
 
       {/* Filter Tabs & Search */}

@@ -34,7 +34,9 @@ jobs:
         run: npm ci
 
       - name: Run automated test suite
-        run: npx tsx src/scripts/testRunner.ts
+        run: |
+          npx tsx src/scripts/testRunner.ts
+          npx tsx src/scripts/testCashDrawer.ts
 
       - name: Build production bundle
         run: npm run build

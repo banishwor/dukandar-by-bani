@@ -1,17 +1,33 @@
 {
-  "short_name": "BizManager",
-  "name": "Offline Business Manager PWA",
-  "description": "Offline-first business management Progressive Web App for inventory, customer balances, and point-of-sale transactions",
-  "start_url": "/",
+  "id": "dukandar-by-bani",
+  "short_name": "Dukandar",
+  "name": "Dukandar by Bani — Offline Business Manager",
+  "description": "Offline-first retail business manager PWA for inventory, POS sales, customer ledger, and daily cash drawer",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#0f172a",
   "theme_color": "#0f172a",
-  "orientation": "portrait-primary",
+  "orientation": "any",
+  "categories": ["business", "finance", "productivity"],
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon.svg",
       "type": "image/svg+xml",
-      "sizes": "192x192 512x512"
+      "sizes": "192x192 512x512",
+      "purpose": "any"
     }
   ]
 }

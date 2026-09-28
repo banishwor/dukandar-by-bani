@@ -29,10 +29,10 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <input
             id={inputId}
             ref={ref}
-            className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border bg-white text-slate-900 placeholder:text-slate-400 text-sm font-normal transition-all focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 ${
-              prefixElement ? 'pl-9' : ''
-            } ${suffixElement ? 'pr-9' : ''} ${
-              error ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-slate-200 hover:border-slate-300'
+            className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border bg-white text-slate-900 placeholder:text-slate-400 text-sm font-medium transition-all focus:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:border-blue-600 ${
+              props.type === 'number' || props.inputMode === 'decimal' ? 'tabular-nums font-mono' : ''
+            } ${prefixElement ? 'pl-9' : ''} ${suffixElement ? 'pr-9' : ''} ${
+              error ? 'border-rose-400 focus-visible:border-rose-500 focus-visible:ring-rose-200' : 'border-slate-200/90 hover:border-slate-300'
             } ${className}`}
             {...props}
           />

@@ -73,27 +73,30 @@ export const saleService = {
     const deviceId = getPersistentDeviceId();
     const now = new Date().toISOString();
 
-    // 1. Check stock availability for inventory-tracked items
-    const stockMap = await inventoryRepository.getAllStockMap(businessId);
+    // 1. Check stock availability for inventory-tracked items (if negative stock is disallowed)
+    const allowNegative = payload.allowNegativeStock !== false;
+    if (!allowNegative) {
+      const stockMap = await inventoryRepository.getAllStockMap(businessId);
 
-    // Accumulate total quantity needed per item in case of duplicate lines
-    const requiredQuantities: Record<string, { name: string; qty: number; track: boolean }> = {};
-    for (const line of payload.lines) {
-      if (!requiredQuantities[line.itemId]) {
-        requiredQuantities[line.itemId] = {
-          name: line.itemNameSnapshot,
-          qty: 0,
-          track: line.trackInventory,
-        };
+      // Accumulate total quantity needed per item in case of duplicate lines
+      const requiredQuantities: Record<string, { name: string; qty: number; track: boolean }> = {};
+      for (const line of payload.lines) {
+        if (!requiredQuantities[line.itemId]) {
+          requiredQuantities[line.itemId] = {
+            name: line.itemNameSnapshot,
+            qty: 0,
+            track: line.trackInventory,
+          };
+        }
+        requiredQuantities[line.itemId].qty += line.quantity;
       }
-      requiredQuantities[line.itemId].qty += line.quantity;
-    }
 
-    for (const [itemId, info] of Object.entries(requiredQuantities)) {
-      if (info.track) {
-        const available = stockMap[itemId] ?? 0;
-        if (available < info.qty) {
-          throw new InsufficientStockError(info.name, available, info.qty);
+      for (const [itemId, info] of Object.entries(requiredQuantities)) {
+        if (info.track) {
+          const available = stockMap[itemId] ?? 0;
+          if (available < info.qty) {
+            throw new InsufficientStockError(info.name, available, info.qty);
+          }
         }
       }
     }

@@ -20,9 +20,22 @@ export interface Business extends BaseRecord {
   phone?: string;
   email?: string;
   address?: string;
+  allowNegativeStock?: boolean;
+  enableExpiryTracking?: boolean;
 }
 
 export type ItemType = 'PRODUCT' | 'SERVICE';
+
+export interface ItemBatch {
+  id: string;
+  itemId?: string;
+  batchNumber: string;
+  expiryDate?: string;
+  mrp: number; // Selling price for this batch
+  costPrice?: number; // Purchase / Cost price for this batch
+  stockQuantity: number; // Available quantity in this batch
+  createdAt?: string;
+}
 
 export interface Item extends BaseRecord {
   name: string;
@@ -38,6 +51,7 @@ export interface Item extends BaseRecord {
   lowStockThreshold?: number;
   trackInventory: boolean;
   isActive: boolean;
+  batches?: ItemBatch[];
 }
 
 export type StockMovementType =
@@ -564,6 +578,7 @@ export interface CompleteSalePayload {
   financialAccountId?: string; // Phase 5 Stage 2 integration
   applyCustomerCredit?: number; // Optional credit to apply from existing customer unallocated balance
   notes?: string;
+  allowNegativeStock?: boolean;
 }
 
 export interface CompletePurchasePayload {
@@ -685,7 +700,8 @@ export interface FinancialMovement {
     | 'SUPPLIER_PAYMENT_REVERSAL'
     | 'REFUND'
     | 'REFUND_RECEIVED'
-    | 'MANUAL';
+    | 'MANUAL'
+    | 'GALLA_CLOSE';
   referenceId?: string;
   description?: string;
   createdAt: string;
@@ -810,5 +826,97 @@ export interface ReverseAccountTransferPayload {
   reason?: string;
   notes?: string;
   reversalDate?: string;
+}
+
+export interface CurrencyDenominations {
+  n500?: number;
+  n200?: number;
+  n100?: number;
+  n50?: number;
+  n20?: number;
+  n10?: number;
+  coins?: number; // Total value of loose coins (₹1, ₹2, ₹5, etc.)
+}
+
+export interface CashDrawerSession extends BaseRecord {
+  sessionNumber: string; // e.g. GALLA-2026-09-28-001
+  sessionDate: string;   // YYYY-MM-DD
+  openedAt: string;      // ISO string
+  closedAt: string;      // ISO string
+  financialAccountId: string; // Cash in Hand account ID
+  
+  // Starting float
+  openingFloat: number;
+  
+  // Breakdown of activity during session window
+  cashSales: number;
+  cashCustomerPayments: number;
+  cashExpenses: number;
+  cashSupplierPayments: number;
+  cashRefunds: number;
+  cashTransfersIn: number;
+  cashTransfersOut: number;
+  
+  // Totals
+  totalCashIn: number;
+  totalCashOut: number;
+  expectedCash: number;
+  
+  // Physical audit
+  countedCash: number;
+  difference: number; // positive = surplus, negative = shortage, 0 = balanced
+  denominations: CurrencyDenominations;
+  
+  // Close allocation
+  takeHomeCash?: number;
+  nextDayFloat?: number;
+  
+  notes?: string;
+  isReconciledLedger?: boolean; // True if an adjustment movement was posted
+}
+
+export interface CloseCashDrawerPayload {
+  businessId: string;
+  financialAccountId: string;
+  sessionDate: string;
+  openedAt: string;
+  closedAt: string;
+  openingFloat: number;
+  cashSales: number;
+  cashCustomerPayments: number;
+  cashExpenses: number;
+  cashSupplierPayments: number;
+  cashRefunds: number;
+  cashTransfersIn: number;
+  cashTransfersOut: number;
+  totalCashIn: number;
+  totalCashOut: number;
+  expectedCash: number;
+  countedCash: number;
+  difference: number;
+  denominations: CurrencyDenominations;
+  takeHomeCash?: number;
+  nextDayFloat?: number;
+  notes?: string;
+  reconcileWithMovement?: boolean;
+}
+
+export interface EODSummaryReport {
+  session: CashDrawerSession;
+  businessName: string;
+  businessPhone?: string;
+  currencySymbol: string;
+  // Day Turnover
+  grossSales: number;
+  discountTotal: number;
+  netSales: number;
+  salesCount: number;
+  // Payment Breakdown
+  cashSalesTotal: number;
+  digitalSalesTotal: number; // UPI, Card, Bank
+  creditKhataTotal: number;  // Given as Udhar
+  customerCollectionsTotal: number; // Udhar recovered
+  expensesTotal: number;
+  supplierPaymentsTotal: number;
 }
 

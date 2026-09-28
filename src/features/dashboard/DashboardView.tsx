@@ -79,7 +79,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
               </h1>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              {business?.type || 'Business Workspace'} · IndexedDB Local Single Source of Truth
+              {business?.type || 'Business Workspace'} · 100% Offline & Private Store
             </p>
           </div>
         </div>
@@ -493,7 +493,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
               </span>
               <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Active Local IndexedDB
+                Offline Local Storage
               </span>
             </div>
 

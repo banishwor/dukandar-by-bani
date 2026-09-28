@@ -204,7 +204,7 @@ export const SyncReadinessView: React.FC = () => {
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Data & Sync Readiness</h1>
         <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-          Local IndexedDB database architecture, offline status, and future multi-device sync metadata.
+          Local device storage architecture, offline security status, and multi-device sync metadata.
         </p>
       </div>
 
@@ -217,7 +217,7 @@ export const SyncReadinessView: React.FC = () => {
             </div>
             <div>
               <h2 className="text-base font-bold text-white">Local Database Single Source of Truth</h2>
-              <p className="text-xs text-slate-400">IndexedDB: businessAppDB (Version 1)</p>
+              <p className="text-xs text-slate-400">Storage Engine: High-Performance Device Database</p>
             </div>
           </div>
 
@@ -257,7 +257,7 @@ export const SyncReadinessView: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-900">Local Table Storage Ledger</h3>
-            <p className="text-xs text-slate-500">Live count of records saved in user's browser IndexedDB</p>
+            <p className="text-xs text-slate-500">Live count of business records saved securely on this device</p>
           </div>
           <Button variant="outline" size="sm" icon={RefreshCw} onClick={loadStats} isLoading={loading}>
             Refresh

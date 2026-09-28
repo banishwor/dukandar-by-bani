@@ -646,13 +646,15 @@ export const NewPurchaseView: React.FC<NewPurchaseViewProps> = ({
                             <span className="text-[11px] text-slate-400">Unit Cost:</span>
                             <input
                               type="number"
+                              inputMode="decimal"
                               step="any"
                               min="0"
                               value={line.unitCost}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) =>
                                 handleUpdateUnitCost(line.itemId, parseFloat(e.target.value) || 0)
                               }
-                              className="w-20 h-6 px-1.5 text-xs font-mono font-semibold border border-slate-200 rounded bg-slate-50"
+                              className="w-20 h-7 px-1.5 text-xs font-mono font-semibold border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                             />
                             <span className="text-[11px] text-slate-400">/ {line.unit}</span>
                           </div>
@@ -675,38 +677,42 @@ export const NewPurchaseView: React.FC<NewPurchaseViewProps> = ({
                           <button
                             type="button"
                             onClick={() => handleUpdateQuantity(line.itemId, line.quantity - 1)}
-                            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center active:scale-95 transition-all"
+                            className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center active:scale-95 transition-all cursor-pointer"
                             aria-label="Decrease quantity"
                           >
-                            <Minus className="w-3.5 h-3.5" />
+                            <Minus className="w-4 h-4" />
                           </button>
                           <input
                             type="number"
+                            inputMode="decimal"
                             min="1"
                             value={line.quantity}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) =>
                               handleUpdateQuantity(line.itemId, Math.max(1, parseInt(e.target.value) || 1))
                             }
-                            className="w-12 h-7 text-center font-bold text-xs border border-slate-200 rounded-lg bg-white"
+                            className="w-14 h-8 text-center font-mono font-bold text-xs border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                            aria-label="Quantity"
                           />
                           <button
                             type="button"
                             onClick={() => handleUpdateQuantity(line.itemId, line.quantity + 1)}
-                            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center active:scale-95 transition-all"
+                            className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center active:scale-95 transition-all cursor-pointer"
                             aria-label="Increase quantity"
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <Plus className="w-4 h-4" />
                           </button>
-                          <span className="text-xs text-slate-500 ml-1">{line.unit}</span>
+                          <span className="text-xs text-slate-500 ml-1 font-medium">{line.unit}</span>
                         </div>
 
                         <button
                           type="button"
                           onClick={() => handleRemoveLine(line.itemId)}
-                          className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+                          className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
                           title="Remove item"
+                          aria-label="Remove item"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
 
@@ -718,7 +724,7 @@ export const NewPurchaseView: React.FC<NewPurchaseViewProps> = ({
                             <button
                               type="button"
                               onClick={() => handleUpdateLineDiscount(line.itemId, 'NONE', 0)}
-                              className={`px-1.5 py-0.5 rounded font-medium ${
+                              className={`px-1.5 py-0.5 rounded font-medium cursor-pointer ${
                                 line.discountType === 'NONE' || !line.discountType
                                   ? 'bg-white text-slate-900 shadow-2xs font-bold'
                                   : 'text-slate-600 hover:text-slate-900'
@@ -735,7 +741,7 @@ export const NewPurchaseView: React.FC<NewPurchaseViewProps> = ({
                                   line.discountValue || 10
                                 )
                               }
-                              className={`px-1.5 py-0.5 rounded font-medium ${
+                              className={`px-1.5 py-0.5 rounded font-medium cursor-pointer ${
                                 line.discountType === 'PERCENTAGE'
                                   ? 'bg-amber-700 text-white shadow-2xs font-bold'
                                   : 'text-slate-600 hover:text-slate-900'
@@ -752,7 +758,7 @@ export const NewPurchaseView: React.FC<NewPurchaseViewProps> = ({
                                   line.discountValue || 10
                                 )
                               }
-                              className={`px-1.5 py-0.5 rounded font-medium ${
+                              className={`px-1.5 py-0.5 rounded font-medium cursor-pointer ${
                                 line.discountType === 'FLAT'
                                   ? 'bg-amber-700 text-white shadow-2xs font-bold'
                                   : 'text-slate-600 hover:text-slate-900'
@@ -765,9 +771,11 @@ export const NewPurchaseView: React.FC<NewPurchaseViewProps> = ({
                           {line.discountType && line.discountType !== 'NONE' && (
                             <input
                               type="number"
+                              inputMode="decimal"
                               min="0"
                               max={line.discountType === 'PERCENTAGE' ? 100 : undefined}
                               value={line.discountValue || ''}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) =>
                                 handleUpdateLineDiscount(
                                   line.itemId,
@@ -870,12 +878,14 @@ export const NewPurchaseView: React.FC<NewPurchaseViewProps> = ({
                   {overallDiscountType !== 'NONE' && (
                     <input
                       type="number"
+                      inputMode="decimal"
                       min="0"
                       max={overallDiscountType === 'PERCENTAGE' ? 100 : undefined}
                       placeholder="0"
                       value={overallDiscountValue}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => setOverallDiscountValue(e.target.value)}
-                      className="w-20 h-7 px-2 rounded-lg border border-amber-300 bg-white text-right text-xs font-mono font-bold"
+                      className="w-20 h-7 px-2 rounded-lg border border-amber-300 bg-white text-right text-xs font-mono font-bold focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                     />
                   )}
                 </div>
@@ -921,7 +931,7 @@ export const NewPurchaseView: React.FC<NewPurchaseViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setPaymentMode('FULL')}
-                  className={`py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     paymentMode === 'FULL'
                       ? 'bg-emerald-600 text-white shadow-2xs'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -932,7 +942,7 @@ export const NewPurchaseView: React.FC<NewPurchaseViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setPaymentMode('UNPAID')}
-                  className={`py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     paymentMode === 'UNPAID'
                       ? 'bg-amber-700 text-white shadow-2xs'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -946,7 +956,7 @@ export const NewPurchaseView: React.FC<NewPurchaseViewProps> = ({
                     setPaymentMode('PARTIAL');
                     if (!customPaidAmount) setCustomPaidAmount(String(Math.floor(remainingAfterCredit / 2)));
                   }}
-                  className={`py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     paymentMode === 'PARTIAL'
                       ? 'bg-slate-900 text-white shadow-2xs'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -962,13 +972,15 @@ export const NewPurchaseView: React.FC<NewPurchaseViewProps> = ({
                     <span className="font-semibold text-amber-900">Paid Now:</span>
                     <input
                       type="number"
+                      inputMode="decimal"
                       step="any"
                       min="0"
                       max={remainingAfterCredit}
                       placeholder="0.00"
                       value={customPaidAmount}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => setCustomPaidAmount(e.target.value)}
-                      className="w-28 h-8 px-2 rounded-lg border border-amber-300 bg-white text-right text-xs font-mono font-bold text-slate-900"
+                      className="w-28 h-8 px-2 rounded-lg border border-amber-300 bg-white text-right text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
                     />
                   </div>
                   <div className="flex justify-between text-xs font-bold text-amber-900 pt-1 border-t border-amber-200">

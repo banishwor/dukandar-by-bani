@@ -410,7 +410,7 @@ export const GoogleBackupCard: React.FC = () => {
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
             <h3 className="text-sm font-bold text-slate-900">Disconnect Google Cloud Backup?</h3>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Disconnecting removes this business's connection to the backup spreadsheet. Your Google Sheet and local business records in IndexedDB will <strong>not</strong> be deleted.
+              Disconnecting removes this business's connection to the backup spreadsheet. Your Google Sheet and local business records on this device will <strong>not</strong> be deleted.
             </p>
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <Button

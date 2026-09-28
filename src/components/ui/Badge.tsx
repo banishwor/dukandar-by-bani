@@ -27,7 +27,7 @@ export const Badge: React.FC<BadgeProps> = ({
   };
 
   return (
-    <span className={`inline-flex items-center gap-1.5 ${variants[variant]} ${sizes[size]} ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 tabular-nums ${variants[variant]} ${sizes[size]} ${className}`}>
       {children}
     </span>
   );

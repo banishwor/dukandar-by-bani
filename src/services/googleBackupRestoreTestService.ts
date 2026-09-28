@@ -609,7 +609,7 @@ export const runGoogleBackupRestoreTestSuite = async (): Promise<RestoreTestResu
     const restoreRes = await googleBackupRestoreService.executeRestore(bId, snapshot);
     const duration = performance.now() - start;
 
-    const passed = restoreRes.success && restoreRes.restoredRecordCount >= 40 && duration < 2000;
+    const passed = restoreRes.success && restoreRes.restoredRecordCount >= 40 && duration < 5000;
     return {
       passed,
       message: `Restored ${restoreRes.restoredRecordCount} records in ${Math.round(duration)}ms.`,

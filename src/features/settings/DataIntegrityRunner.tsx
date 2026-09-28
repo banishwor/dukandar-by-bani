@@ -157,7 +157,7 @@ export const DataIntegrityRunner: React.FC = () => {
           <ShieldCheck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
           <p className="text-xs font-semibold text-slate-600">Run the automated verification suite anytime</p>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            Executes live IndexedDB transactions to test exact financial, FIFO, return, void, and stock ledger math.
+            Executes live database verification to test exact financial, FIFO, return, void, and stock ledger math.
           </p>
         </div>
       )}
