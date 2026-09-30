@@ -168,6 +168,8 @@ export interface PurchaseLine {
   taxAmount: number;
   lineTotal: number;
   trackInventory: boolean;
+  batchNumber?: string;
+  expiryDate?: string;
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -596,6 +598,9 @@ export interface CompletePurchasePayload {
     discountAmount?: number;
     taxAmount?: number;
     trackInventory: boolean;
+    batchNumber?: string;
+    expiryDate?: string;
+    sellingPrice?: number;
   }>;
   subtotal: number;
   discountType?: DiscountType;
@@ -619,6 +624,11 @@ export interface DashboardMetrics {
   totalCustomersCount: number;
   totalItemsCount: number;
   lowStockItemsCount: number;
+  // Today's Profit & Performance Metrics
+  todayGrossProfit?: number;
+  todayCogs?: number;
+  todayProfitMargin?: number;
+  todayItemsSold?: number;
   // Supplier & Purchase Metrics
   thisMonthPurchasesCount?: number;
   thisMonthPurchasesAmount?: number;

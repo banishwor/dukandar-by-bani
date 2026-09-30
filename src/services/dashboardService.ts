@@ -74,6 +74,46 @@ export const dashboardService = {
       todaySales.reduce((sum, s) => sum + (Number(s.totalAmount) || 0), 0)
     );
 
+    // Today's returns (if any)
+    const todayReturns = returns.filter(
+      (r) => (r.returnDate || r.createdAt).slice(0, 10) === todayStr
+    );
+    const todayReturnsAmount = roundCurrency(
+      todayReturns.reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0)
+    );
+    const todayNetSalesAmount = roundCurrency(Math.max(0, todaySalesAmount - todayReturnsAmount));
+
+    // Calculate Today's Cost of Goods Sold (COGS) & Units Sold
+    const todaySaleIds = new Set(todaySales.map((s) => s.id));
+    let todayCogs = 0;
+    let todayItemsSold = 0;
+
+    if (todaySaleIds.size > 0) {
+      const todaySaleLines = await db.saleLines
+        .where('businessId')
+        .equals(businessId)
+        .filter((sl) => todaySaleIds.has(sl.saleId))
+        .toArray();
+
+      const itemCostMap = new Map<string, number>();
+      for (const item of items) {
+        itemCostMap.set(item.id, Number(item.costPrice ?? item.purchasePrice ?? 0));
+      }
+
+      for (const line of todaySaleLines) {
+        const qty = Number(line.quantity) || 0;
+        todayItemsSold += qty;
+        const unitCost = itemCostMap.get(line.itemId) || 0;
+        todayCogs += qty * unitCost;
+      }
+    }
+
+    todayCogs = roundCurrency(todayCogs);
+    const todayGrossProfit = roundCurrency(todayNetSalesAmount - todayCogs);
+    const todayProfitMargin = todayNetSalesAmount > 0
+      ? Number(((todayGrossProfit / todayNetSalesAmount) * 100).toFixed(1))
+      : 0;
+
     const grossSalesAmount = activeSales.reduce((sum, s) => sum + (Number(s.totalAmount) || 0), 0);
     const totalSalesAmount = roundCurrency(Math.max(0, grossSalesAmount - totalReturnsAmount));
 
@@ -216,6 +256,10 @@ export const dashboardService = {
     const metrics: DashboardMetrics = {
       todaySalesCount: todaySales.length,
       todaySalesAmount,
+      todayGrossProfit,
+      todayCogs,
+      todayProfitMargin,
+      todayItemsSold,
       totalSalesAmount,
       totalPaidAmount,
       totalDueAmount,

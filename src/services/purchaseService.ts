@@ -220,6 +220,8 @@ export const purchaseService = {
         taxAmount: calcLine ? calcLine.taxAmount : (line.taxAmount || 0),
         lineTotal: calcLine ? calcLine.lineTotal : roundCurrency(line.quantity * line.unitCost - (line.discountAmount || 0)),
         trackInventory: line.trackInventory,
+        batchNumber: line.batchNumber?.trim() || undefined,
+        expiryDate: line.expiryDate?.trim() || undefined,
         createdAt: now,
         updatedAt: now,
         version: 1,
@@ -245,13 +247,34 @@ export const purchaseService = {
       }
     }
 
-    // 8. Construct item cost updates (updating purchasePrice to latest unit cost)
+    // 8. Construct item cost & batch updates (updating purchasePrice, sellingPrice, and batch stock)
     const costUpdates: ItemCostUpdate[] = [];
     for (const line of payload.lines) {
-      if (line.unitCost > 0) {
+      const isExplicitBatch = Boolean(line.batchNumber && line.batchNumber.trim());
+      const hasBatchOrExpiry = Boolean(
+        isExplicitBatch || (line.expiryDate && line.expiryDate.trim())
+      );
+
+      if (
+        line.unitCost > 0 ||
+        (line.sellingPrice && line.sellingPrice > 0) ||
+        hasBatchOrExpiry
+      ) {
         costUpdates.push({
           itemId: line.itemId,
           newPurchaseCost: line.unitCost,
+          newSellingPrice: line.sellingPrice && line.sellingPrice > 0 ? line.sellingPrice : undefined,
+          batch:
+            hasBatchOrExpiry
+              ? {
+                  batchNumber: line.batchNumber?.trim() || undefined,
+                  isExplicitBatch,
+                  expiryDate: line.expiryDate?.trim() || undefined,
+                  mrp: line.sellingPrice && line.sellingPrice > 0 ? line.sellingPrice : undefined,
+                  costPrice: line.unitCost > 0 ? line.unitCost : undefined,
+                  quantity: Math.abs(line.quantity),
+                }
+              : undefined,
         });
       }
     }

@@ -8,6 +8,7 @@ import { PaySupplierModal } from '../suppliers/PaySupplierModal';
 import { CreatePurchaseReturnModal } from './CreatePurchaseReturnModal';
 import { VoidPurchaseModal } from './VoidPurchaseModal';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
+import { printElement } from '../../utils/printDocument';
 import { useBusiness } from '../../contexts/BusinessContext';
 import type { Supplier } from '../../types';
 import {
@@ -20,6 +21,7 @@ import {
   DollarSign,
   Package,
   Truck,
+  Calendar,
 } from 'lucide-react';
 
 interface PurchaseDetailModalProps {
@@ -57,6 +59,10 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
             setSupplier(null);
           }
         })
+        .catch((err) => {
+          console.error('Failed to load purchase details:', err);
+          setDetails(null);
+        })
         .finally(() => setLoading(false));
     }
   };
@@ -66,8 +72,20 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
   }, [purchaseId, isOpen]);
 
   const handlePrint = () => {
-    window.print();
+    if (details) {
+      printElement('printable-purchase-bill', `Purchase Bill #${details.purchase.purchaseNumber}`);
+    }
   };
+
+  if (isOpen && (!details || loading)) {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title="Loading Purchase Bill..." maxWidth="lg">
+        <div className="py-12 text-center text-sm text-slate-500">
+          Loading purchase bill details...
+        </div>
+      </Modal>
+    );
+  }
 
   if (!details) return null;
 
@@ -79,11 +97,12 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
     returns,
     returnLines,
     voidRecord,
-    refunds,
+    refundsReceived,
     effectiveTotalAmount,
     totalReturnedAmount,
     isVoided,
   } = details;
+  const refunds = refundsReceived || details.refunds || [];
 
   const isFullyReturned =
     totalReturnedAmount >= (Number(purchase.totalAmount) || 0) - 0.005 &&
@@ -102,6 +121,19 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
         maxWidth="lg"
       >
         <div className="space-y-6">
+          {/* Top Quick Actions Bar (Screen Only) */}
+          <div className="print-hidden no-print flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              icon={Printer}
+              onClick={handlePrint}
+              className="bg-amber-700 hover:bg-amber-800 text-white shadow-xs cursor-pointer font-semibold"
+            >
+              Print Bill Receipt
+            </Button>
+          </div>
+
           {/* Voided Warning Notice Banner */}
           {isVoided && voidRecord && (
             <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3">
@@ -122,7 +154,10 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
           )}
 
           {/* Printable Bill Card */}
-          <div className="p-6 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-6">
+          <div
+            id="printable-purchase-bill"
+            className="p-6 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-6 print:border-none print:p-0 print:m-0 print:bg-white"
+          >
             {/* Header */}
             <div className="flex justify-between items-start border-b border-slate-200 pb-4">
               <div>
@@ -202,11 +237,22 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
                       <tr key={line.id}>
                         <td className="py-2.5 px-3">
                           <span className="font-semibold text-slate-800 block">{line.itemNameSnapshot}</span>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                             <span className="text-[11px] text-slate-400">Unit: {line.unit}</span>
+                            {line.batchNumber && (
+                              <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-700 border border-slate-200 rounded font-mono font-bold">
+                                Batch: {line.batchNumber}
+                              </span>
+                            )}
+                            {line.expiryDate && (
+                              <span className="text-[10px] px-1.5 py-0.2 bg-amber-50 text-amber-800 border border-amber-200 rounded font-mono font-bold flex items-center gap-1">
+                                <Calendar className="w-2.5 h-2.5 text-amber-700" />
+                                Exp: {line.expiryDate}
+                              </span>
+                            )}
                             {returnedQtyForLine > 0 && (
-                              <span className="text-[10px] px-1.5 py-0.2 bg-amber-50 text-amber-700 border border-amber-200 rounded font-semibold">
-                                {returnedQtyForLine} {line.unit} returned to vendor
+                              <span className="text-[10px] px-1.5 py-0.2 bg-rose-50 text-rose-700 border border-rose-200 rounded font-semibold">
+                                {returnedQtyForLine} {line.unit} returned
                               </span>
                             )}
                           </div>

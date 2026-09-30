@@ -29,7 +29,7 @@ interface DashboardViewProps {
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
-  const { business, deviceId, isOnline } = useBusiness();
+  const { business } = useBusiness();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recentSales, setRecentSales] = useState<Sale[]>([]);
   const [recentPurchases, setRecentPurchases] = useState<Purchase[]>([]);
@@ -178,9 +178,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           <span className="text-xl sm:text-2xl font-bold text-slate-900 block font-mono">
             {formatCurrency(metrics.todaySalesAmount, business?.currencySymbol)}
           </span>
-          <span className="text-xs text-slate-400 block font-medium">
-            {metrics.todaySalesCount} {metrics.todaySalesCount === 1 ? 'sale' : 'sales'} today
-          </span>
+          <div className="flex items-center justify-between text-xs pt-0.5">
+            <span className="text-slate-400 font-medium">
+              {metrics.todaySalesCount} {metrics.todaySalesCount === 1 ? 'sale' : 'sales'} today
+            </span>
+            {(metrics.todayGrossProfit || 0) > 0 && (
+              <span className="font-semibold text-emerald-600 font-mono text-[11px] bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200/60">
+                +{formatCurrency(metrics.todayGrossProfit || 0, business?.currencySymbol)} profit
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Total Revenue */}
@@ -485,40 +492,84 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             )}
           </div>
 
-          {/* Quick Business Snapshot */}
-          <div className="bg-slate-900 text-white rounded-3xl p-5 sm:p-6 space-y-3 shadow-md">
+          {/* Today's Profit & Performance Card */}
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Offline Database Status
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Offline Local Storage
-              </span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 pt-2 text-xs">
-              <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700/60 text-center">
-                <span className="text-slate-400 block text-[10px] mb-0.5">Catalog Items</span>
-                <span className="text-base font-bold text-white">{metrics.totalItemsCount}</span>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Today's Profit & Performance</h3>
+                  <p className="text-[11px] text-slate-400">Live gross earnings & margin analysis</p>
+                </div>
               </div>
-              <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700/60 text-center">
-                <span className="text-slate-400 block text-[10px] mb-0.5">Customers</span>
-                <span className="text-base font-bold text-white">{metrics.totalCustomersCount}</span>
-              </div>
-              <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700/60 text-center">
-                <span className="text-slate-400 block text-[10px] mb-0.5">Suppliers</span>
-                <span className="text-base font-bold text-white">{metrics.totalSuppliersCount || 0}</span>
-              </div>
-            </div>
-
-            <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400">
-              <span>Device ID: {deviceId.substring(0, 16)}...</span>
-              <button
-                onClick={() => onNavigate('SYNC')}
-                className="text-blue-400 hover:text-blue-300 font-semibold"
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold font-mono ${
+                  (metrics.todayProfitMargin || 0) >= 0
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
+                    : 'bg-rose-50 text-rose-700 border border-rose-200/80'
+                }`}
               >
-                Sync Readiness &gt;
+                {(metrics.todayProfitMargin || 0) >= 0 ? '+' : ''}
+                {(metrics.todayProfitMargin || 0).toFixed(1)}% Margin
+              </span>
+            </div>
+
+            {/* Hero Profit Metric Banner */}
+            <div className="p-4 bg-linear-to-br from-emerald-50/80 via-emerald-50/30 to-slate-50/60 border border-emerald-100 rounded-2xl">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">
+                Estimated Gross Profit
+              </span>
+              <div className="flex items-baseline justify-between mt-1">
+                <span className="text-2xl sm:text-3xl font-extrabold text-emerald-700 font-mono tracking-tight">
+                  {formatCurrency(metrics.todayGrossProfit || 0, business?.currencySymbol)}
+                </span>
+                <span className="text-xs font-semibold text-emerald-800">
+                  from {metrics.todaySalesCount} {metrics.todaySalesCount === 1 ? 'bill' : 'bills'}
+                </span>
+              </div>
+            </div>
+
+            {/* Metric Breakdown Grid */}
+            <div className="grid grid-cols-2 gap-2.5 pt-0.5 text-xs">
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 block font-medium">Today's Sales</span>
+                <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block">
+                  {formatCurrency(metrics.todaySalesAmount, business?.currencySymbol)}
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 block font-medium">Cost of Goods (COGS)</span>
+                <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block">
+                  {formatCurrency(metrics.todayCogs || 0, business?.currencySymbol)}
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 block font-medium">Items Sold Today</span>
+                <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block">
+                  {metrics.todayItemsSold || 0} units
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 block font-medium">Cash Collected</span>
+                <span className="text-sm font-bold font-mono text-emerald-600 mt-0.5 block">
+                  +{formatCurrency(metrics.todayMoneyIn || 0, business?.currencySymbol)}
+                </span>
+              </div>
+            </div>
+
+            {/* Link to Detailed Sales Reports */}
+            <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-100">
+              <span className="text-[11px] text-slate-400 font-medium">Full business breakdown</span>
+              <button
+                onClick={() => onNavigate('REPORTS')}
+                className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 hover:underline transition-all"
+              >
+                Detailed Sales Report <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>

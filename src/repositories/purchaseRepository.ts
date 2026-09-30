@@ -12,6 +12,7 @@ import type {
   SyncMetadata,
   PurchaseStatus,
   Item,
+  ItemBatch,
   FinancialMovement,
 } from '../types';
 import { generateInvoiceNumber, generateUniqueId } from '../utils/id';
@@ -28,6 +29,7 @@ export interface PurchaseFullDetails {
   returnLines: PurchaseReturnLine[];
   voidRecord?: PurchaseVoid;
   refundsReceived: RefundReceived[];
+  refunds?: RefundReceived[];
   effectiveTotalAmount: number;
   totalReturnedAmount: number;
   isVoided: boolean;
@@ -36,6 +38,15 @@ export interface PurchaseFullDetails {
 export interface ItemCostUpdate {
   itemId: string;
   newPurchaseCost: number;
+  newSellingPrice?: number;
+  batch?: {
+    batchNumber?: string;
+    isExplicitBatch?: boolean;
+    expiryDate?: string;
+    mrp?: number;
+    costPrice?: number;
+    quantity: number;
+  };
 }
 
 /**
@@ -297,6 +308,7 @@ export const purchaseRepository = {
       returnLines,
       voidRecord,
       refundsReceived,
+      refunds: refundsReceived,
       effectiveTotalAmount,
       totalReturnedAmount,
       isVoided,
@@ -426,43 +438,124 @@ export const purchaseRepository = {
         // 1. Add Purchase
         await db.purchases.add(purchase);
 
-        // 2. Add Purchase Lines
-        if (lines.length > 0) {
-          await db.purchaseLines.bulkAdd(lines);
-        }
-
-        // 3. Add Stock Movements
-        if (stockMovements.length > 0) {
-          await db.stockMovements.bulkAdd(stockMovements);
-        }
-
-        // 4. Add Payment (if paid > 0)
-        if (payment) {
-          await db.supplierPayments.add(payment);
-        }
-
-        // 5. Add Allocations
-        if (allocations && allocations.length > 0) {
-          await db.supplierPaymentAllocations.bulkAdd(allocations);
-        }
-
-        // 6. Add Financial Movement (if paid > 0)
-        if (movement) {
-          await db.financialMovements.add(movement);
-        }
-
-        // 6. Update Item last purchase costs safely
+        // 2. Update Item last purchase costs, selling prices, and batches safely
+        // (Performed before purchaseLines.bulkAdd so lines inherit matched or generated batchNumber)
         if (costUpdates && costUpdates.length > 0) {
           for (const cu of costUpdates) {
             const item = await db.items.get(cu.itemId);
-            if (item && !item.isDeleted && cu.newPurchaseCost > 0) {
+            if (item && !item.isDeleted) {
               const nextVer = getNextRecordVersion(item, 'Item');
-              await db.items.update(cu.itemId, {
-                purchasePrice: cu.newPurchaseCost,
+              const updates: Partial<Item> = {
                 updatedAt: now,
                 updatedByDeviceId: deviceId,
                 version: nextVer,
-              });
+              };
+
+              if (cu.newPurchaseCost > 0) {
+                updates.purchasePrice = cu.newPurchaseCost;
+                updates.costPrice = cu.newPurchaseCost;
+              }
+
+              if (cu.newSellingPrice && cu.newSellingPrice > 0) {
+                updates.sellingPrice = cu.newSellingPrice;
+              }
+
+              // Handle inward batch creation / increment
+              if (cu.batch && (cu.batch.batchNumber || cu.batch.expiryDate)) {
+                const currentBatches: ItemBatch[] = item.batches ? [...item.batches] : [];
+                const effectiveMrp = cu.batch.mrp || cu.newSellingPrice || item.sellingPrice || 0;
+                const effectiveCost = cu.batch.costPrice || cu.newPurchaseCost || item.purchasePrice || item.costPrice || 0;
+
+                let resolvedBatchNumber: string | undefined = undefined;
+
+                if (cu.batch.isExplicitBatch && cu.batch.batchNumber) {
+                  // User explicitly typed a batch name
+                  const explicitNum = cu.batch.batchNumber.trim();
+                  resolvedBatchNumber = explicitNum;
+                  const existingIdx = currentBatches.findIndex(
+                    (b) => b.batchNumber.toLowerCase() === explicitNum.toLowerCase()
+                  );
+
+                  if (existingIdx >= 0) {
+                    currentBatches[existingIdx] = {
+                      ...currentBatches[existingIdx],
+                      stockQuantity: (currentBatches[existingIdx].stockQuantity || 0) + cu.batch.quantity,
+                      mrp: effectiveMrp > 0 ? effectiveMrp : currentBatches[existingIdx].mrp,
+                      costPrice: effectiveCost > 0 ? effectiveCost : currentBatches[existingIdx].costPrice,
+                      expiryDate: cu.batch.expiryDate || currentBatches[existingIdx].expiryDate,
+                    };
+                  } else {
+                    currentBatches.push({
+                      id: generateUniqueId('BATCH'),
+                      itemId: item.id,
+                      batchNumber: explicitNum,
+                      expiryDate: cu.batch.expiryDate || undefined,
+                      mrp: effectiveMrp > 0 ? effectiveMrp : undefined,
+                      costPrice: effectiveCost > 0 ? effectiveCost : undefined,
+                      stockQuantity: cu.batch.quantity,
+                      createdAt: now,
+                    });
+                  }
+                } else if (cu.batch.expiryDate) {
+                  // User did not enter a batch name:
+                  // Check existing batches for (Same Expiry Date + Same MRP + Same Cost Price)
+                  const cleanExpiry = cu.batch.expiryDate.trim();
+                  const matchedIdx = currentBatches.findIndex((b) => {
+                    const sameExpiry = b.expiryDate === cleanExpiry;
+                    const bMrp = b.mrp ?? 0;
+                    const bCost = b.costPrice ?? 0;
+                    const sameMrp = Math.abs(bMrp - effectiveMrp) < 0.01;
+                    const sameCost = Math.abs(bCost - effectiveCost) < 0.01;
+                    return sameExpiry && sameMrp && sameCost;
+                  });
+
+                  if (matchedIdx >= 0) {
+                    // Match found: increment existing batch stock and reuse its existing batch number
+                    currentBatches[matchedIdx] = {
+                      ...currentBatches[matchedIdx],
+                      stockQuantity: (currentBatches[matchedIdx].stockQuantity || 0) + cu.batch.quantity,
+                    };
+                    resolvedBatchNumber = currentBatches[matchedIdx].batchNumber;
+                  } else {
+                    // No match: generate clean EXP batch name, avoiding collisions
+                    let candidateName = `EXP-${cleanExpiry}`;
+                    const collision = currentBatches.some(
+                      (b) => b.batchNumber.toLowerCase() === candidateName.toLowerCase()
+                    );
+                    if (collision) {
+                      candidateName = `EXP-${cleanExpiry}-₹${Math.round(effectiveMrp)}`;
+                      if (currentBatches.some((b) => b.batchNumber.toLowerCase() === candidateName.toLowerCase())) {
+                        candidateName = `EXP-${cleanExpiry}-₹${Math.round(effectiveMrp)}-${currentBatches.length + 1}`;
+                      }
+                    }
+
+                    resolvedBatchNumber = candidateName;
+                    currentBatches.push({
+                      id: generateUniqueId('BATCH'),
+                      itemId: item.id,
+                      batchNumber: candidateName,
+                      expiryDate: cleanExpiry,
+                      mrp: effectiveMrp > 0 ? effectiveMrp : undefined,
+                      costPrice: effectiveCost > 0 ? effectiveCost : undefined,
+                      stockQuantity: cu.batch.quantity,
+                      createdAt: now,
+                    });
+                  }
+                }
+
+                // Enrich corresponding purchase lines with the resolved batchNumber
+                if (resolvedBatchNumber) {
+                  for (const line of lines) {
+                    if (line.itemId === cu.itemId && !line.batchNumber) {
+                      line.batchNumber = resolvedBatchNumber;
+                    }
+                  }
+                }
+
+                updates.batches = currentBatches;
+              }
+
+              await db.items.update(cu.itemId, updates);
 
               // Also update sync metadata for updated item
               await db.syncMetadata
@@ -476,7 +569,32 @@ export const purchaseRepository = {
           }
         }
 
-        // 7. Add Sync Metadata
+        // 3. Add Purchase Lines (enriched with resolved batchNumber)
+        if (lines.length > 0) {
+          await db.purchaseLines.bulkAdd(lines);
+        }
+
+        // 4. Add Stock Movements
+        if (stockMovements.length > 0) {
+          await db.stockMovements.bulkAdd(stockMovements);
+        }
+
+        // 5. Add Payment (if paid > 0)
+        if (payment) {
+          await db.supplierPayments.add(payment);
+        }
+
+        // 6. Add Allocations
+        if (allocations && allocations.length > 0) {
+          await db.supplierPaymentAllocations.bulkAdd(allocations);
+        }
+
+        // 7. Add Financial Movement (if paid > 0)
+        if (movement) {
+          await db.financialMovements.add(movement);
+        }
+
+        // 8. Add Sync Metadata
         await db.syncMetadata.bulkAdd(syncRecords);
       }
     );

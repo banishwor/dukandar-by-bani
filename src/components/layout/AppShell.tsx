@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useBusiness } from '../../contexts/BusinessContext';
 import {
   LayoutDashboard,
@@ -17,8 +17,14 @@ import {
   Landmark,
   Wallet,
   BarChart3,
+  Eye,
+  EyeOff,
+  Lock,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { privacyService } from '../../services/privacyService';
+import { CreatePrivacyPinModal } from '../../features/privacy/CreatePrivacyPinModal';
+import { PrivacyLockOverlay } from '../../features/privacy/PrivacyLockOverlay';
 
 export type NavTab =
   | 'DASHBOARD'
@@ -48,6 +54,49 @@ export const AppShell: React.FC<AppShellProps> = ({
 }) => {
   const { business, isOnline, deviceId } = useBusiness();
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [isPrivacyActive, setIsPrivacyActive] = useState<boolean>(() => privacyService.isPrivacyActive());
+  const [isCreatePinModalOpen, setIsCreatePinModalOpen] = useState(false);
+
+  const handleTogglePrivacy = () => {
+    if (isPrivacyActive) {
+      return; // Already locked, unlock happens via PIN in overlay
+    }
+    if (!privacyService.isPinConfigured()) {
+      setIsCreatePinModalOpen(true);
+    } else {
+      privacyService.setPrivacyActive(true);
+      setIsPrivacyActive(true);
+    }
+  };
+
+  // Keyboard shortcuts: F9 and Alt+H for Privacy Mode, Alt+P for New Purchase
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // F9 or Alt+H to trigger Privacy Mode
+      if (e.key === 'F9' || (e.altKey && e.key.toLowerCase() === 'h')) {
+        e.preventDefault();
+        if (!privacyService.isPinConfigured()) {
+          setIsCreatePinModalOpen(true);
+        } else {
+          if (!isPrivacyActive) {
+            privacyService.setPrivacyActive(true);
+            setIsPrivacyActive(true);
+          }
+        }
+      }
+
+      // Alt+P for New Purchase (reserved shortcut)
+      if (e.altKey && e.key.toLowerCase() === 'p') {
+        if (!isPrivacyActive) {
+          e.preventDefault();
+          onSelectTab('NEW_PURCHASE');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPrivacyActive, onSelectTab]);
 
   const salesNavItems: Array<{ id: NavTab; label: string; icon: React.FC<{ className?: string }> }> = [
     { id: 'DASHBOARD', label: 'Dashboard', icon: LayoutDashboard },
@@ -70,7 +119,11 @@ export const AppShell: React.FC<AppShellProps> = ({
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row text-slate-900 font-sans">
       {/* Desktop Sidebar (Visible on md and up) */}
-      <aside className="hidden md:flex flex-col w-64 lg:w-72 bg-white border-r border-slate-200/90 shrink-0 sticky top-0 h-screen z-30">
+      <aside
+        className={`hidden md:flex flex-col w-64 lg:w-72 bg-white border-r border-slate-200/90 shrink-0 sticky top-0 h-screen z-30 transition-opacity ${
+          isPrivacyActive ? 'pointer-events-none select-none opacity-70' : ''
+        }`}
+      >
         {/* Business Brand Header */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
@@ -86,6 +139,39 @@ export const AppShell: React.FC<AppShellProps> = ({
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Privacy Mode Quick Toggle in Sidebar */}
+        <div className="px-4 pt-2.5 pb-1">
+          <button
+            onClick={handleTogglePrivacy}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-2xl text-xs font-semibold border transition-all ${
+              isPrivacyActive
+                ? 'bg-amber-500 text-white border-amber-600 shadow-xs ring-2 ring-amber-300'
+                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200/90 hover:border-slate-300'
+            }`}
+            title="Privacy Mode: Hide screen from customers (F9 or Alt+H)"
+          >
+            <span className="flex items-center gap-2">
+              {isPrivacyActive ? (
+                <EyeOff className="w-3.5 h-3.5 text-white animate-pulse" />
+              ) : (
+                <Eye className="w-3.5 h-3.5 text-slate-500" />
+              )}
+              <span>{isPrivacyActive ? 'Screen Hidden' : 'Privacy Mode'}</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd
+                className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                  isPrivacyActive
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-white border border-slate-200 text-slate-400'
+                }`}
+              >
+                F9
+              </kbd>
+            </span>
+          </button>
         </div>
 
         {/* Quick Action Buttons */}
@@ -259,6 +345,24 @@ export const AppShell: React.FC<AppShellProps> = ({
 
           {/* Right Header Status Badges */}
           <div className="flex items-center gap-2.5">
+            {/* Privacy Mode Quick Toggle in Top Bar */}
+            <button
+              onClick={handleTogglePrivacy}
+              className={`h-8 px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-semibold transition-all ${
+                isPrivacyActive
+                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs ring-2 ring-amber-300'
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+              }`}
+              title="Lock screen with Privacy Mode (F9 / Alt+H)"
+            >
+              {isPrivacyActive ? (
+                <EyeOff className="w-3.5 h-3.5 text-white animate-pulse" />
+              ) : (
+                <Eye className="w-3.5 h-3.5 text-slate-500" />
+              )}
+              <span className="hidden sm:inline">{isPrivacyActive ? 'Locked' : 'Privacy'}</span>
+            </button>
+
             {/* Offline pill indicator */}
             <div
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
@@ -306,7 +410,11 @@ export const AppShell: React.FC<AppShellProps> = ({
       </div>
 
       {/* Mobile Bottom Navigation (Visible on <md) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg">
+      <div
+        className={`md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg ${
+          isPrivacyActive ? 'pointer-events-none select-none opacity-40' : ''
+        }`}
+      >
         <button
           onClick={() => onSelectTab('DASHBOARD')}
           className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all ${
@@ -459,6 +567,24 @@ export const AppShell: React.FC<AppShellProps> = ({
           </div>
         </div>
       )}
+
+      {/* Privacy Lock Screen Overlay (blurs entire screen except left sidebar) */}
+      <PrivacyLockOverlay
+        isOpen={isPrivacyActive}
+        onUnlock={() => setIsPrivacyActive(false)}
+        onResetPin={() => setIsCreatePinModalOpen(true)}
+      />
+
+      {/* First-Time PIN Setup Modal */}
+      <CreatePrivacyPinModal
+        isOpen={isCreatePinModalOpen}
+        onClose={() => setIsCreatePinModalOpen(false)}
+        onPinCreated={() => {
+          setIsCreatePinModalOpen(false);
+          privacyService.setPrivacyActive(true);
+          setIsPrivacyActive(true);
+        }}
+      />
     </div>
   );
 };

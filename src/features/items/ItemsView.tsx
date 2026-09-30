@@ -374,6 +374,11 @@ export const ItemsView: React.FC = () => {
                               {item.batches.length} Batches
                             </span>
                           )}
+                          {item.batches && item.batches.length === 1 && item.batches[0].expiryDate && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 font-mono">
+                              Exp: {item.batches[0].expiryDate}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs text-slate-400">
@@ -546,6 +551,11 @@ export const ItemsView: React.FC = () => {
                                 {item.batches && item.batches.length > 1 && (
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
                                     {item.batches.length} Batches
+                                  </span>
+                                )}
+                                {item.batches && item.batches.length === 1 && item.batches[0].expiryDate && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 font-mono">
+                                    Exp: {item.batches[0].expiryDate}
                                   </span>
                                 )}
                               </div>

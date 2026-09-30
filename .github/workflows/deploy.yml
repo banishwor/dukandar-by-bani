@@ -37,6 +37,7 @@ jobs:
         run: |
           npx tsx src/scripts/testRunner.ts
           npx tsx src/scripts/testCashDrawer.ts
+          npx tsx src/scripts/testPurchasePOS.ts
 
       - name: Build production bundle
         run: npm run build
