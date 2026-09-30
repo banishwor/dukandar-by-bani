@@ -114,7 +114,7 @@ export const AccountFormModal: React.FC<AccountFormModalProps> = ({
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Account Type Selection */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
             Account Type
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -126,13 +126,13 @@ export const AccountFormModal: React.FC<AccountFormModalProps> = ({
                   type="button"
                   key={item.type}
                   onClick={() => setType(item.type)}
-                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-medium transition-all ${
+                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                     isSelected
-                      ? 'bg-blue-600/20 border-blue-500/50 text-blue-400 font-semibold'
-                      : 'bg-slate-800/50 border-slate-700/50 text-slate-300 hover:bg-slate-800'
+                      ? 'bg-blue-50 border-blue-500 text-blue-700 font-semibold shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isSelected ? 'text-blue-400' : 'text-slate-400'}`} />
+                  <Icon className={`w-4 h-4 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
                 </button>
               );
@@ -199,22 +199,22 @@ export const AccountFormModal: React.FC<AccountFormModalProps> = ({
             id="isDefaultAccount"
             checked={isDefault}
             onChange={(e) => setIsDefault(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
           />
-          <label htmlFor="isDefaultAccount" className="text-sm font-medium text-slate-200 cursor-pointer">
+          <label htmlFor="isDefaultAccount" className="text-sm font-medium text-slate-700 cursor-pointer">
             Set as default primary account for this business
           </label>
         </div>
 
         {/* Notes */}
         <div>
-          <label className="block text-xs font-medium text-slate-300 mb-1">Notes / Description</label>
+          <label className="block text-xs font-medium text-slate-700 mb-1">Notes / Description</label>
           <textarea
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional details or internal notes..."
-            className="w-full bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-xs"
           />
         </div>
 

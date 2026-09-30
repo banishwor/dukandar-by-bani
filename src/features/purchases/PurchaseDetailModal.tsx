@@ -10,7 +10,7 @@ import { VoidPurchaseModal } from './VoidPurchaseModal';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
 import { printElement } from '../../utils/printDocument';
 import { useBusiness } from '../../contexts/BusinessContext';
-import type { Supplier } from '../../types';
+import type { Supplier, PrintFormat } from '../../types';
 import {
   Printer,
   ShieldCheck,
@@ -22,6 +22,9 @@ import {
   Package,
   Truck,
   Calendar,
+  FileText,
+  File,
+  Receipt,
 } from 'lucide-react';
 
 interface PurchaseDetailModalProps {
@@ -44,6 +47,15 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
   const [isPaySupplierOpen, setIsPaySupplierOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isVoidModalOpen, setIsVoidModalOpen] = useState(false);
+  const [selectedFormat, setSelectedFormat] = useState<PrintFormat>(
+    () => business?.defaultPrintFormat || 'A4'
+  );
+
+  useEffect(() => {
+    if (business?.defaultPrintFormat) {
+      setSelectedFormat(business.defaultPrintFormat);
+    }
+  }, [business?.defaultPrintFormat, business?.printOptionMode]);
 
   const loadDetails = () => {
     if (purchaseId && isOpen) {
@@ -71,9 +83,13 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
     loadDetails();
   }, [purchaseId, isOpen]);
 
-  const handlePrint = () => {
+  const handlePrint = (overrideFormat?: PrintFormat) => {
     if (details) {
-      printElement('printable-purchase-bill', `Purchase Bill #${details.purchase.purchaseNumber}`);
+      const fmt = overrideFormat || selectedFormat;
+      printElement('printable-purchase-bill', {
+        format: fmt,
+        documentTitle: `Purchase Bill #${details.purchase.purchaseNumber}`,
+      });
     }
   };
 
@@ -118,20 +134,123 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
         onClose={onClose}
         title={`Purchase Bill #${purchase.purchaseNumber}`}
         subtitle={`Recorded ${formatDateTime(purchase.purchaseDate || purchase.createdAt)}`}
-        maxWidth="lg"
+        maxWidth="2xl"
       >
         <div className="space-y-6">
           {/* Top Quick Actions Bar (Screen Only) */}
-          <div className="print-hidden no-print flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              icon={Printer}
-              onClick={handlePrint}
-              className="bg-amber-700 hover:bg-amber-800 text-white shadow-xs cursor-pointer font-semibold"
-            >
-              Print Bill Receipt
-            </Button>
+          <div className="print-hidden no-print flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2.5">
+            {/* Primary Action Buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Printer}
+                onClick={() => handlePrint()}
+                className="bg-amber-700 hover:bg-amber-800 text-white shadow-xs cursor-pointer font-semibold"
+              >
+                Print {selectedFormat === 'THERMAL' ? 'Thermal Receipt' : `${selectedFormat} Bill`}
+              </Button>
+
+              {/* Pay Bill Action */}
+              {purchase.dueAmount > 0 && supplier && !isVoided && (
+                <Button
+                  variant="success"
+                  size="sm"
+                  icon={PlusCircle}
+                  onClick={() => setIsPaySupplierOpen(true)}
+                  className="shadow-xs cursor-pointer font-semibold"
+                >
+                  Pay Due ({formatCurrency(purchase.dueAmount, business?.currencySymbol)})
+                </Button>
+              )}
+
+              {/* Return Items Action */}
+              {canReturn && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={RotateCcw}
+                  onClick={() => setIsReturnModalOpen(true)}
+                  className="cursor-pointer"
+                >
+                  Return Items
+                </Button>
+              )}
+
+              {/* Void Bill Action */}
+              {canVoid && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-rose-600 hover:bg-rose-50 cursor-pointer"
+                  icon={XCircle}
+                  onClick={() => setIsVoidModalOpen(true)}
+                >
+                  Void Bill
+                </Button>
+              )}
+            </div>
+
+            {/* Right Side: Format Switcher (if PROMPT mode) and Done Action */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Print Format Switcher Pills (Only visible when PROMPT mode is active in settings) */}
+              {business?.printOptionMode === 'PROMPT' && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-400 font-medium hidden sm:inline">Format:</span>
+                  <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFormat('A4')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        selectedFormat === 'A4'
+                          ? 'bg-white text-amber-800 shadow-xs ring-1 ring-slate-200'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="A4 Full Page (Standard Laser/Inkjet)"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>A4</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFormat('A5')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        selectedFormat === 'A5'
+                          ? 'bg-white text-amber-800 shadow-xs ring-1 ring-slate-200'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="A5 Half Page (Paper Saver)"
+                    >
+                      <File className="w-3.5 h-3.5" />
+                      <span>A5</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFormat('THERMAL')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        selectedFormat === 'THERMAL'
+                          ? 'bg-white text-amber-800 shadow-xs ring-1 ring-slate-200'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="80mm POS Thermal Receipt Roll"
+                    >
+                      <Receipt className="w-3.5 h-3.5" />
+                      <span>Thermal 80mm</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Done / Close Button in Top Action Bar */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onClose}
+                className="font-semibold cursor-pointer px-4 bg-white hover:bg-slate-50 border-slate-300 text-slate-700 shadow-2xs"
+              >
+                Done
+              </Button>
+            </div>
           </div>
 
           {/* Voided Warning Notice Banner */}
@@ -153,11 +272,153 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
             </div>
           )}
 
-          {/* Printable Bill Card */}
-          <div
-            id="printable-purchase-bill"
-            className="p-6 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-6 print:border-none print:p-0 print:m-0 print:bg-white"
-          >
+          {/* Printable Document (Adaptive to THERMAL / A5 / A4) */}
+          {selectedFormat === 'THERMAL' ? (
+            /* THERMAL 80MM INWARD GOODS VOUCHER */
+            <div
+              id="printable-purchase-bill"
+              className="max-w-[76mm] mx-auto p-4 bg-white border border-slate-300 rounded-xl font-mono text-[11px] leading-tight text-slate-900 space-y-2.5 shadow-xs"
+            >
+              {/* Header */}
+              <div className="text-center space-y-0.5">
+                <h2 className="text-sm font-black tracking-tight uppercase">
+                  {business?.name || 'Retail Store'}
+                </h2>
+                <p className="text-[10px] font-bold uppercase text-amber-800">Inward Purchase Voucher</p>
+                {business?.address && (
+                  <p className="text-[10px] text-slate-600">{business.address}</p>
+                )}
+                {business?.phone && (
+                  <p className="text-[10px] text-slate-600">Tel: {business.phone}</p>
+                )}
+              </div>
+
+              <div className="border-b border-dashed border-slate-400 my-1" />
+
+              {/* Bill Details */}
+              <div className="text-[10px] space-y-0.5">
+                <div className="flex justify-between font-bold">
+                  <span>BILL #{purchase.purchaseNumber}</span>
+                  <span className="uppercase text-[9px] px-1 bg-slate-100 rounded">
+                    {purchase.status}
+                  </span>
+                </div>
+                <div className="text-slate-600">
+                  DATE: {formatDateTime(purchase.purchaseDate || purchase.createdAt)}
+                </div>
+                <div className="flex justify-between">
+                  <span>SUPPLIER:</span>
+                  <span className="font-bold truncate max-w-[140px]">{purchase.supplierNameSnapshot}</span>
+                </div>
+                {supplier?.phone && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>TEL:</span>
+                    <span>{supplier.phone}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-b border-dashed border-slate-400 my-1" />
+
+              {/* Items List */}
+              <div className="space-y-1.5 text-[10px]">
+                <div className="flex justify-between font-bold border-b border-slate-300 pb-0.5 text-slate-700">
+                  <span className="w-1/2">ITEM</span>
+                  <span className="w-1/4 text-center">QTY x RATE</span>
+                  <span className="w-1/4 text-right">TOTAL</span>
+                </div>
+                {lines.map((line) => {
+                  const returnedQtyForLine = returnLines
+                    .filter((rl) => rl.originalPurchaseLineId === line.id)
+                    .reduce((sum, rl) => sum + rl.quantityReturned, 0);
+
+                  return (
+                    <div key={line.id} className="space-y-0.5">
+                      <div className="font-bold text-slate-900 break-words">
+                        {line.itemNameSnapshot}
+                      </div>
+                      <div className="flex justify-between text-slate-600 pl-1">
+                        <span>
+                          {line.quantity} {line.unit} @ {formatCurrency(line.rate, business?.currencySymbol)}
+                        </span>
+                        <span className="font-bold text-slate-900">
+                          {formatCurrency(line.lineTotal, business?.currencySymbol)}
+                        </span>
+                      </div>
+                      {line.batchNumber && (
+                        <div className="text-[9px] text-slate-500 pl-1">
+                          Batch: {line.batchNumber} {line.expiryDate ? `· Exp: ${line.expiryDate}` : ''}
+                        </div>
+                      )}
+                      {returnedQtyForLine > 0 && (
+                        <div className="flex justify-between text-amber-800 text-[9px] pl-1 font-semibold">
+                          <span>Returned: {returnedQtyForLine} {line.unit}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="border-b border-dashed border-slate-400 my-1" />
+
+              {/* Financial Totals */}
+              <div className="space-y-1 text-[10px]">
+                <div className="flex justify-between text-slate-600">
+                  <span>Gross Total:</span>
+                  <span>{formatCurrency(purchase.totalAmount, business?.currencySymbol)}</span>
+                </div>
+
+                <div className="border-y-2 border-slate-900 py-1 font-black text-xs flex justify-between">
+                  <span>BILL TOTAL:</span>
+                  <span>{formatCurrency(purchase.totalAmount, business?.currencySymbol)}</span>
+                </div>
+
+                {totalReturnedAmount > 0 && (
+                  <div className="flex justify-between text-amber-800 font-semibold">
+                    <span>Less Returns:</span>
+                    <span>-{formatCurrency(totalReturnedAmount, business?.currencySymbol)}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-0.5 text-slate-800">
+                  <span>Paid to Supplier:</span>
+                  <span className="font-bold">{formatCurrency(purchase.paidAmount, business?.currencySymbol)}</span>
+                </div>
+
+                {purchase.dueAmount > 0 && !isVoided ? (
+                  <div className="flex justify-between font-black text-rose-700 border-t border-dotted border-slate-400 pt-0.5">
+                    <span>BALANCE DUE:</span>
+                    <span>{formatCurrency(purchase.dueAmount, business?.currencySymbol)}</span>
+                  </div>
+                ) : (
+                  <div className="text-center font-bold text-emerald-700 py-0.5">
+                    *** PAID IN FULL ***
+                  </div>
+                )}
+              </div>
+
+              <div className="border-b border-dashed border-slate-400 my-1" />
+
+              {/* Thermal Footer */}
+              <div className="text-center space-y-1 text-[9px] text-slate-500 pt-1">
+                <div>Items: {lines.length}</div>
+                <div className="font-bold uppercase tracking-wider text-slate-700">
+                  Stock Received & Verified
+                </div>
+                <div className="text-[8px] text-slate-400 font-mono pt-0.5">
+                  Powered by Dukandar
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Printable Bill Card (A4 / A5) */
+            <div
+              id="printable-purchase-bill"
+              className={`bg-slate-50 border border-slate-200/80 rounded-2xl space-y-6 print:border-none print:p-0 print:m-0 print:bg-white ${
+                selectedFormat === 'A5' ? 'p-4 sm:p-5 space-y-4 text-xs' : 'p-6 space-y-6'
+              }`}
+            >
             {/* Header */}
             <div className="flex justify-between items-start border-b border-slate-200 pb-4">
               <div>
@@ -219,7 +480,7 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
                 <thead>
                   <tr className="bg-slate-100/75 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
                     <th className="py-2.5 px-3">Item Received</th>
-                    <th className="py-2.5 px-3 text-right">Qty</th>
+                    <th className="py-2.5 px-3 text-center">Qty</th>
                     <th className="py-2.5 px-3 text-right">Unit Cost</th>
                     {lines.some((l) => l.discountAmount > 0) && (
                       <th className="py-2.5 px-3 text-right">Disc</th>
@@ -237,27 +498,28 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
                       <tr key={line.id}>
                         <td className="py-2.5 px-3">
                           <span className="font-semibold text-slate-800 block">{line.itemNameSnapshot}</span>
-                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            <span className="text-[11px] text-slate-400">Unit: {line.unit}</span>
-                            {line.batchNumber && (
-                              <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-700 border border-slate-200 rounded font-mono font-bold">
-                                Batch: {line.batchNumber}
-                              </span>
-                            )}
-                            {line.expiryDate && (
-                              <span className="text-[10px] px-1.5 py-0.2 bg-amber-50 text-amber-800 border border-amber-200 rounded font-mono font-bold flex items-center gap-1">
-                                <Calendar className="w-2.5 h-2.5 text-amber-700" />
-                                Exp: {line.expiryDate}
-                              </span>
-                            )}
-                            {returnedQtyForLine > 0 && (
-                              <span className="text-[10px] px-1.5 py-0.2 bg-rose-50 text-rose-700 border border-rose-200 rounded font-semibold">
-                                {returnedQtyForLine} {line.unit} returned
-                              </span>
-                            )}
-                          </div>
+                          {(line.batchNumber || line.expiryDate || returnedQtyForLine > 0) && (
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              {line.batchNumber && (
+                                <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-700 border border-slate-200 rounded font-mono font-bold">
+                                  Batch: {line.batchNumber}
+                                </span>
+                              )}
+                              {line.expiryDate && (
+                                <span className="text-[10px] px-1.5 py-0.2 bg-amber-50 text-amber-800 border border-amber-200 rounded font-mono font-bold flex items-center gap-1">
+                                  <Calendar className="w-2.5 h-2.5 text-amber-700" />
+                                  Exp: {line.expiryDate}
+                                </span>
+                              )}
+                              {returnedQtyForLine > 0 && (
+                                <span className="text-[10px] px-1.5 py-0.2 bg-rose-50 text-rose-700 border border-rose-200 rounded font-semibold">
+                                  {returnedQtyForLine} {line.unit} returned
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-medium text-slate-700">
+                        <td className="py-2.5 px-3 text-center font-medium text-slate-700">
                           {line.quantity} {line.unit}
                         </td>
                         <td className="py-2.5 px-3 text-right text-slate-600 font-mono">
@@ -448,53 +710,8 @@ export const PurchaseDetailModal: React.FC<PurchaseDetailModalProps> = ({
               </span>
             </div>
           </div>
+        )}
 
-          {/* Actions Bar */}
-          <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <Button variant="outline" icon={Printer} onClick={handlePrint}>
-                Print Bill
-              </Button>
-
-              {/* Return Items Action */}
-              {canReturn && (
-                <Button
-                  variant="outline"
-                  icon={RotateCcw}
-                  onClick={() => setIsReturnModalOpen(true)}
-                >
-                  Return Items
-                </Button>
-              )}
-
-              {/* Void Bill Action */}
-              {canVoid && (
-                <Button
-                  variant="ghost"
-                  className="text-rose-600 hover:bg-rose-50"
-                  icon={XCircle}
-                  onClick={() => setIsVoidModalOpen(true)}
-                >
-                  Void Bill
-                </Button>
-              )}
-
-              {/* Pay Bill Action */}
-              {purchase.dueAmount > 0 && supplier && !isVoided && (
-                <Button
-                  variant="primary"
-                  icon={PlusCircle}
-                  onClick={() => setIsPaySupplierOpen(true)}
-                >
-                  Pay Bill
-                </Button>
-              )}
-            </div>
-
-            <Button variant="primary" onClick={onClose}>
-              Done
-            </Button>
-          </div>
         </div>
       </Modal>
 

@@ -22,17 +22,31 @@ import {
   AlertCircle,
   Coins,
   SlidersHorizontal,
+  CalendarClock,
 } from 'lucide-react';
 import { useToast } from '../../components/ui/Toast';
 
-export const ItemsView: React.FC = () => {
+export interface ItemsViewProps {
+  initialFilter?: 'ALL' | 'PRODUCTS' | 'SERVICES' | 'LOW_STOCK' | 'NEGATIVE' | 'EXPIRING';
+  onFilterChanged?: () => void;
+}
+
+export const ItemsView: React.FC<ItemsViewProps> = ({ initialFilter, onFilterChanged }) => {
   const { business } = useBusiness();
   const { showSuccess, showError } = useToast();
 
   const [items, setItems] = useState<ItemWithStock[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'PRODUCTS' | 'SERVICES' | 'LOW_STOCK' | 'NEGATIVE'>('ALL');
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'PRODUCTS' | 'SERVICES' | 'LOW_STOCK' | 'NEGATIVE' | 'EXPIRING'>(
+    initialFilter || 'ALL'
+  );
+
+  useEffect(() => {
+    if (initialFilter) {
+      setActiveFilter(initialFilter);
+    }
+  }, [initialFilter]);
 
   // Modals state
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -97,6 +111,47 @@ export const ItemsView: React.FC = () => {
   const productsCount = items.filter((i) => i.type === 'PRODUCT').length;
   const servicesCount = items.filter((i) => i.type === 'SERVICE').length;
 
+  // Helper to compute expiry status for an item across its active batches
+  const getItemExpiryInfo = useCallback((item: ItemWithStock) => {
+    if (!item.batches || item.batches.length === 0) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let minDays: number | null = null;
+    let nearestBatchNumber = '';
+    let hasExpired = false;
+    let hasNearExpiry = false;
+
+    for (const b of item.batches) {
+      if (!b.expiryDate || (b.stockQuantity ?? 0) <= 0) continue;
+      const expDate = new Date(b.expiryDate);
+      expDate.setHours(0, 0, 0, 0);
+      const diff = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (diff < 0) {
+        hasExpired = true;
+      } else if (diff <= 60) {
+        hasNearExpiry = true;
+      }
+      if (minDays === null || diff < minDays) {
+        minDays = diff;
+        nearestBatchNumber = b.batchNumber;
+      }
+    }
+
+    if (minDays === null) return null;
+    return {
+      daysRemaining: minDays,
+      batchNumber: nearestBatchNumber,
+      isExpired: hasExpired,
+      isNearExpiry: hasNearExpiry || hasExpired,
+    };
+  }, []);
+
+  const expiringItemsCount = items.filter((i) => {
+    const info = getItemExpiryInfo(i);
+    return info && info.isNearExpiry;
+  }).length;
+
   const filteredItems = items.filter((item) => {
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -110,6 +165,10 @@ export const ItemsView: React.FC = () => {
     if (activeFilter === 'SERVICES') return item.type === 'SERVICE';
     if (activeFilter === 'LOW_STOCK') return item.isLowStock && item.currentStock >= 0;
     if (activeFilter === 'NEGATIVE') return item.trackInventory && item.currentStock < 0;
+    if (activeFilter === 'EXPIRING') {
+      const info = getItemExpiryInfo(item);
+      return Boolean(info && info.isNearExpiry);
+    }
     return true;
   });
 
@@ -279,19 +338,41 @@ export const ItemsView: React.FC = () => {
             Services ({servicesCount})
           </button>
           <button
-            onClick={() => setActiveFilter('LOW_STOCK')}
+            onClick={() => {
+              setActiveFilter('LOW_STOCK');
+              onFilterChanged?.();
+            }}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
               activeFilter === 'LOW_STOCK'
-                ? 'bg-amber-600 text-white'
+                ? 'bg-amber-600 text-white shadow-xs'
                 : 'bg-white text-amber-800 hover:bg-amber-50 border border-amber-200'
             }`}
           >
             <AlertTriangle className="w-3.5 h-3.5" />
             Low Stock ({lowStockCount})
           </button>
+          {expiringItemsCount > 0 && (
+            <button
+              onClick={() => {
+                setActiveFilter('EXPIRING');
+                onFilterChanged?.();
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeFilter === 'EXPIRING'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'bg-white text-rose-700 hover:bg-rose-50 border border-rose-200'
+              }`}
+            >
+              <CalendarClock className="w-3.5 h-3.5" />
+              Near Expiry ({expiringItemsCount})
+            </button>
+          )}
           {negativeStockCount > 0 && (
             <button
-              onClick={() => setActiveFilter('NEGATIVE')}
+              onClick={() => {
+                setActiveFilter('NEGATIVE');
+                onFilterChanged?.();
+              }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeFilter === 'NEGATIVE'
                   ? 'bg-rose-600 text-white'
@@ -375,10 +456,32 @@ export const ItemsView: React.FC = () => {
                             </span>
                           )}
                           {item.batches && item.batches.length === 1 && item.batches[0].expiryDate && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 font-mono">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 font-mono">
                               Exp: {item.batches[0].expiryDate}
                             </span>
                           )}
+                          {(() => {
+                            const exp = getItemExpiryInfo(item);
+                            if (!exp || !exp.isNearExpiry) return null;
+                            return (
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold font-mono ${
+                                  exp.isExpired
+                                    ? 'bg-rose-100 text-rose-800 border border-rose-300 animate-pulse'
+                                    : exp.daysRemaining <= 30
+                                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                    : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
+                                }`}
+                              >
+                                <CalendarClock className="w-3 h-3" />
+                                {exp.isExpired
+                                  ? `Expired (${Math.abs(exp.daysRemaining)}d ago)`
+                                  : exp.daysRemaining === 0
+                                  ? 'Expires Today'
+                                  : `Expiring in ${exp.daysRemaining}d`}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs text-slate-400">
@@ -546,7 +649,7 @@ export const ItemsView: React.FC = () => {
                               )}
                             </div>
                             <div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-bold text-slate-900 block">{item.name}</span>
                                 {item.batches && item.batches.length > 1 && (
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
@@ -554,10 +657,32 @@ export const ItemsView: React.FC = () => {
                                   </span>
                                 )}
                                 {item.batches && item.batches.length === 1 && item.batches[0].expiryDate && (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 font-mono">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 font-mono">
                                     Exp: {item.batches[0].expiryDate}
                                   </span>
                                 )}
+                                {(() => {
+                                  const exp = getItemExpiryInfo(item);
+                                  if (!exp || !exp.isNearExpiry) return null;
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold font-mono ${
+                                        exp.isExpired
+                                          ? 'bg-rose-100 text-rose-800 border border-rose-300 animate-pulse'
+                                          : exp.daysRemaining <= 30
+                                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                          : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
+                                      }`}
+                                    >
+                                      <CalendarClock className="w-3 h-3" />
+                                      {exp.isExpired
+                                        ? `Expired (${Math.abs(exp.daysRemaining)}d ago)`
+                                        : exp.daysRemaining === 0
+                                        ? 'Expires Today'
+                                        : `Expiring in ${exp.daysRemaining}d`}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                               <span className="text-[11px] text-slate-400">
                                 Unit: {item.unit} {item.sku ? `· SKU: ${item.sku}` : ''}

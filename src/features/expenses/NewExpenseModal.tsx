@@ -114,13 +114,13 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
         {/* Category Selector + Add Category Button */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Expense Category *
             </label>
             <button
               type="button"
               onClick={onManageCategories}
-              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 font-medium"
+              className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium transition-colors"
             >
               <Tag className="w-3 h-3" />
               <span>Manage Categories</span>
@@ -129,7 +129,7 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors shadow-2xs"
             required
           >
             <option value="">Select category...</option>
@@ -143,13 +143,13 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
 
         {/* Paid From Account */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
             Paid From Account *
           </label>
           <select
             value={financialAccountId}
             onChange={(e) => setFinancialAccountId(e.target.value)}
-            className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors shadow-2xs"
             required
           >
             <option value="">Select financial account...</option>
@@ -160,9 +160,9 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
             ))}
           </select>
           {selectedAccount && (
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Account balance:{' '}
-              <span className="font-semibold text-emerald-400">
+              <span className="font-semibold text-emerald-600">
                 {formatCurrency(selectedAccount.derivedBalance)}
               </span>
             </p>
@@ -183,12 +183,12 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
           />
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Expense Date *</label>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Expense Date *</label>
             <input
               type="date"
               value={expenseDate}
               onChange={(e) => setExpenseDate(e.target.value)}
-              className="w-full bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors shadow-2xs"
               required
             />
           </div>
@@ -197,11 +197,11 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
         {/* Payment Method & Payee */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Payment Method</label>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Payment Method</label>
             <select
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-              className="w-full bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors shadow-2xs"
             >
               <option value="CASH">Cash</option>
               <option value="UPI">UPI</option>
@@ -221,18 +221,18 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
 
         {/* Description / Notes */}
         <div>
-          <label className="block text-xs font-medium text-slate-300 mb-1">Notes / Description</label>
+          <label className="block text-xs font-medium text-slate-700 mb-1">Notes / Description</label>
           <textarea
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional details or invoice reference..."
-            className="w-full bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors shadow-2xs"
           />
         </div>
 
         {/* Form Actions */}
-        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
           <Button variant="ghost" type="button" onClick={onClose}>
             Cancel
           </Button>

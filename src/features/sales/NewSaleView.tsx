@@ -343,6 +343,76 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
   };
 
   const customerInputRef = useRef<HTMLInputElement | null>(null);
+  const overallDiscountBtnRef = useRef<HTMLButtonElement | null>(null);
+  const overallDiscountInputRef = useRef<HTMLInputElement | null>(null);
+  const cashTenderInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Focus overall discount section (invoked when tabbing out of the last item's discount field)
+  const handleFocusOverallDiscount = useCallback(() => {
+    if (overallDiscountType !== 'NONE' && overallDiscountInputRef.current) {
+      overallDiscountInputRef.current.focus();
+      overallDiscountInputRef.current.select();
+    } else if (overallDiscountBtnRef.current) {
+      overallDiscountBtnRef.current.focus();
+    }
+  }, [overallDiscountType]);
+
+  // Clear cart and reset overall discounts / tenders
+  const handleClearCart = useCallback(() => {
+    updateActiveDraft({
+      cart: [
+        {
+          itemId: '',
+          name: '',
+          unit: 'pcs',
+          rate: 0,
+          quantity: 1,
+          discountType: 'NONE' as DiscountType,
+          discountValue: 0,
+          discountAmount: 0,
+          taxAmount: 0,
+          trackInventory: false,
+          availableStock: 0,
+          expiryDate: '',
+          batchNumber: '',
+        },
+      ],
+      overallDiscountType: 'NONE',
+      overallDiscountValue: '',
+      cashTenderAmount: '',
+      customPaidAmount: '',
+    });
+  }, [updateActiveDraft]);
+
+  // Auto-reconcile deposit account according to payment method (CASH vs Digital)
+  useEffect(() => {
+    if (accounts.length === 0) return;
+
+    if (paymentMethod === 'CASH') {
+      const cashAccounts = accounts.filter((a) => a.type === 'CASH');
+      const currentIsCash = cashAccounts.some((a) => a.id === financialAccountId);
+      if (!currentIsCash) {
+        const defaultCash = cashAccounts.find((a) => a.isDefault) || cashAccounts[0];
+        if (defaultCash) {
+          updateActiveDraft({ financialAccountId: defaultCash.id });
+        }
+      } else if (cashAccounts.length === 1 && financialAccountId !== cashAccounts[0].id) {
+        updateActiveDraft({ financialAccountId: cashAccounts[0].id });
+      }
+    } else {
+      // UPI, CARD, BANK_TRANSFER, OTHER
+      const nonCashAccounts = accounts.filter((a) => a.type !== 'CASH');
+      const currentIsNonCash = nonCashAccounts.some((a) => a.id === financialAccountId);
+      if (!currentIsNonCash) {
+        const defaultNonCash = nonCashAccounts.find((a) => a.isDefault) || nonCashAccounts[0];
+        if (defaultNonCash) {
+          updateActiveDraft({ financialAccountId: defaultNonCash.id });
+        }
+      } else if (nonCashAccounts.length === 1 && financialAccountId !== nonCashAccounts[0].id) {
+        updateActiveDraft({ financialAccountId: nonCashAccounts[0].id });
+      }
+    }
+  }, [paymentMethod, accounts, financialAccountId, updateActiveDraft]);
 
   // Global Keyboard Shortcuts (100% Mouse-Free Invoicing)
   useEffect(() => {
@@ -529,6 +599,10 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
           <span className="inline-flex items-center gap-1">
             <kbd className="bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shadow-3xs">F4</kbd> Checkout
           </span>
+          <span className="text-slate-300">·</span>
+          <span className="inline-flex items-center gap-1">
+            <kbd className="bg-white px-1.5 py-0.5 rounded border text-[10px] font-mono font-bold text-slate-800 shadow-3xs">Alt+C</kbd> Clear
+          </span>
         </div>
 
         {onCancel && (
@@ -655,6 +729,8 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
         enableExpiryTracking={business?.enableExpiryTracking}
         businessId={business?.id}
         onUpdateCart={(newCart) => updateActiveDraft({ cart: newCart })}
+        onClearCart={handleClearCart}
+        onFocusOverallDiscount={handleFocusOverallDiscount}
         onItemRestocked={(updatedItem) => {
           setItems((prev) =>
             prev.map((it) => (it.id === updatedItem.id ? updatedItem : it))
@@ -677,7 +753,23 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
                     </label>
                     <select
                       value={paymentMethod}
-                      onChange={(e) => updateActiveDraft({ paymentMethod: e.target.value as PaymentMethod })}
+                      onChange={(e) => {
+                        const nextMethod = e.target.value as PaymentMethod;
+                        let nextAccountId = financialAccountId;
+                        if (nextMethod === 'CASH') {
+                          const cashAccounts = accounts.filter((a) => a.type === 'CASH');
+                          const defaultCash = cashAccounts.find((a) => a.isDefault) || cashAccounts[0];
+                          if (defaultCash) nextAccountId = defaultCash.id;
+                        } else {
+                          const nonCashAccounts = accounts.filter((a) => a.type !== 'CASH');
+                          const defaultNonCash = nonCashAccounts.find((a) => a.isDefault) || nonCashAccounts[0];
+                          if (defaultNonCash) nextAccountId = defaultNonCash.id;
+                        }
+                        updateActiveDraft({
+                          paymentMethod: nextMethod,
+                          financialAccountId: nextAccountId,
+                        });
+                      }}
                       className="w-full h-8 px-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs font-medium cursor-pointer"
                     >
                       <option value="CASH">Cash</option>
@@ -697,11 +789,21 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
                       onChange={(e) => updateActiveDraft({ financialAccountId: e.target.value })}
                       className="w-full h-8 px-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs font-medium cursor-pointer"
                     >
-                      {accounts.map((acc) => (
-                        <option key={acc.id} value={acc.id}>
-                          {acc.name} {acc.isDefault ? '(Default)' : ''}
-                        </option>
-                      ))}
+                      {accounts.map((acc) => {
+                        const isCash = acc.type === 'CASH';
+                        const isDisabled = paymentMethod === 'CASH' ? !isCash : isCash;
+                        let labelNote = acc.isDefault ? ' (Default)' : '';
+                        if (isDisabled) {
+                          labelNote += isCash
+                            ? ' — Cash (Disabled for UPI/Digital)'
+                            : ' — Non-Cash (Disabled for Cash)';
+                        }
+                        return (
+                          <option key={acc.id} value={acc.id} disabled={isDisabled}>
+                            {acc.name}{labelNote}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>
@@ -714,6 +816,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-mono text-slate-500">{business?.currencySymbol || '₹'}</span>
                         <input
+                          ref={cashTenderInputRef}
                           type="number"
                           inputMode="decimal"
                           step="any"
@@ -854,12 +957,17 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
                       None
                     </button>
                     <button
+                      ref={overallDiscountBtnRef}
                       type="button"
                       onClick={() => {
                         updateActiveDraft({
                           overallDiscountType: 'PERCENTAGE',
                           overallDiscountValue: overallDiscountValue || '5',
                         });
+                        setTimeout(() => {
+                          overallDiscountInputRef.current?.focus();
+                          overallDiscountInputRef.current?.select();
+                        }, 50);
                       }}
                       className={`px-1.5 py-0.5 rounded font-medium cursor-pointer ${
                         overallDiscountType === 'PERCENTAGE'
@@ -876,6 +984,10 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
                           overallDiscountType: 'FLAT',
                           overallDiscountValue: overallDiscountValue || '50',
                         });
+                        setTimeout(() => {
+                          overallDiscountInputRef.current?.focus();
+                          overallDiscountInputRef.current?.select();
+                        }, 50);
                       }}
                       className={`px-1.5 py-0.5 rounded font-medium cursor-pointer ${
                         overallDiscountType === 'FLAT'
@@ -889,6 +1001,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
 
                   {overallDiscountType !== 'NONE' && (
                     <input
+                      ref={overallDiscountInputRef}
                       type="number"
                       inputMode="decimal"
                       min="0"
@@ -897,6 +1010,15 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({
                       value={overallDiscountValue}
                       onFocus={(e) => e.target.select()}
                       onChange={(e) => updateActiveDraft({ overallDiscountValue: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                          if (paymentMethod === 'CASH' && cashTenderInputRef.current) {
+                            e.preventDefault();
+                            cashTenderInputRef.current.focus();
+                            cashTenderInputRef.current.select();
+                          }
+                        }
+                      }}
                       className="w-16 h-6 px-1.5 rounded-md border border-blue-300 bg-white text-right text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                     />
                   )}

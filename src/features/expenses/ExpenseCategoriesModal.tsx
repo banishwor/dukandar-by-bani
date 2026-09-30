@@ -101,8 +101,8 @@ export const ExpenseCategoriesModal: React.FC<ExpenseCategoriesModalProps> = ({
                 key={cat.id}
                 className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-colors ${
                   cat.isArchived
-                    ? 'bg-slate-900/40 border-slate-800 opacity-60 text-slate-500'
-                    : 'bg-slate-800/70 border-slate-700/70 text-slate-200'
+                    ? 'bg-slate-50 border-slate-200/80 opacity-60 text-slate-400'
+                    : 'bg-white border-slate-200/80 text-slate-800 shadow-2xs hover:bg-slate-50/50'
                 }`}
               >
                 {isEditing ? (
@@ -111,7 +111,7 @@ export const ExpenseCategoriesModal: React.FC<ExpenseCategoriesModalProps> = ({
                       type="text"
                       value={editingName}
                       onChange={(e) => setEditingName(e.target.value)}
-                      className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-xs text-white flex-1 focus:outline-none"
+                      className="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-slate-900 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
                     />
                     <Button variant="primary" size="sm" onClick={() => handleSaveEdit(cat.id)}>
                       Save
@@ -122,8 +122,8 @@ export const ExpenseCategoriesModal: React.FC<ExpenseCategoriesModalProps> = ({
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <Tag className="w-3.5 h-3.5 text-blue-400" />
-                    <span className="font-semibold text-white">{cat.name}</span>
+                    <Tag className="w-3.5 h-3.5 text-blue-500" />
+                    <span className="font-semibold text-slate-800">{cat.name}</span>
                     {cat.isArchived && (
                       <Badge variant="neutral" className="text-[9px] py-0">
                         Archived
@@ -141,18 +141,18 @@ export const ExpenseCategoriesModal: React.FC<ExpenseCategoriesModalProps> = ({
                         setEditingId(cat.id);
                         setEditingName(cat.name);
                       }}
-                      className="p-1 text-slate-400 hover:text-white"
+                      className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
                     >
-                      <Edit2 className="w-3 h-3" />
+                      <Edit2 className="w-3.5 h-3.5" />
                     </Button>
 
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleArchive(cat)}
-                      className={`p-1 ${cat.isArchived ? 'text-emerald-400' : 'text-slate-400 hover:text-rose-400'}`}
+                      className={`p-1 ${cat.isArchived ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}
                     >
-                      {cat.isArchived ? <RotateCcw className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
+                      {cat.isArchived ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
                     </Button>
                   </div>
                 )}
@@ -161,7 +161,7 @@ export const ExpenseCategoriesModal: React.FC<ExpenseCategoriesModalProps> = ({
           })}
         </div>
 
-        <div className="flex justify-end pt-3 border-t border-slate-800">
+        <div className="flex justify-end pt-3 border-t border-slate-100">
           <Button variant="ghost" onClick={onClose}>
             Done
           </Button>

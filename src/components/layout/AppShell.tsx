@@ -69,7 +69,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     }
   };
 
-  // Keyboard shortcuts: F9 and Alt+H for Privacy Mode, Alt+P for New Purchase
+  // Keyboard shortcuts: F9 and Alt+H for Privacy Mode, Alt+S for New Sale, Alt+P for New Purchase
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // F9 or Alt+H to trigger Privacy Mode
@@ -82,6 +82,14 @@ export const AppShell: React.FC<AppShellProps> = ({
             privacyService.setPrivacyActive(true);
             setIsPrivacyActive(true);
           }
+        }
+      }
+
+      // Alt+S for New Sale (reserved shortcut)
+      if (e.altKey && e.key.toLowerCase() === 's') {
+        if (!isPrivacyActive) {
+          e.preventDefault();
+          onSelectTab('NEW_SALE');
         }
       }
 
@@ -182,6 +190,7 @@ export const AppShell: React.FC<AppShellProps> = ({
             icon={Plus}
             onClick={() => onSelectTab('NEW_SALE')}
             fullWidth
+            title="New Sale (Alt+S)"
             className="shadow-sm text-xs font-semibold justify-center bg-blue-600 hover:bg-blue-700 text-white"
           >
             + Sale
@@ -192,6 +201,7 @@ export const AppShell: React.FC<AppShellProps> = ({
             icon={Plus}
             onClick={() => onSelectTab('NEW_PURCHASE')}
             fullWidth
+            title="New Purchase (Alt+P)"
             className="shadow-sm text-xs font-semibold justify-center text-amber-800 border-amber-300 hover:bg-amber-50"
           >
             + Purchase

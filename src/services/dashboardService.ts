@@ -3,7 +3,7 @@ import { itemRepository } from '../repositories/itemRepository';
 import { saleRepository } from '../repositories/saleRepository';
 import { purchaseRepository } from '../repositories/purchaseRepository';
 import { supplierRepository } from '../repositories/supplierRepository';
-import type { DashboardMetrics, ItemWithStock, Sale, Purchase } from '../types';
+import type { DashboardMetrics, ItemWithStock, Sale, Purchase, ExpiringBatchInfo } from '../types';
 import { roundCurrency } from '../utils/money';
 
 export const dashboardService = {
@@ -17,6 +17,7 @@ export const dashboardService = {
     recentSales: Sale[];
     recentPurchases: Purchase[];
     lowStockItems: ItemWithStock[];
+    expiringBatches: ExpiringBatchInfo[];
   }> {
     const sales = await saleRepository.getSales(businessId);
     const purchases = await purchaseRepository.getPurchases(businessId);
@@ -253,6 +254,42 @@ export const dashboardService = {
 
     const lowStockItems = items.filter((i) => i.isLowStock);
 
+    // Calculate Near Expiry & Expired Stock Batches (<= 60 days)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const expiringBatches: ExpiringBatchInfo[] = [];
+
+    for (const item of items) {
+      if (!item.batches || item.batches.length === 0) continue;
+      for (const batch of item.batches) {
+        if (!batch.expiryDate || (batch.stockQuantity ?? 0) <= 0) continue;
+
+        const expDate = new Date(batch.expiryDate);
+        expDate.setHours(0, 0, 0, 0);
+        const diffTime = expDate.getTime() - today.getTime();
+        const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (daysRemaining <= 60) {
+          expiringBatches.push({
+            itemId: item.id,
+            itemName: item.name,
+            unit: item.unit,
+            batchNumber: batch.batchNumber,
+            expiryDate: batch.expiryDate,
+            mrp: batch.mrp,
+            stockQuantity: batch.stockQuantity,
+            daysRemaining,
+            status: daysRemaining < 0 ? 'EXPIRED' : daysRemaining <= 30 ? 'CRITICAL' : 'WARNING',
+          });
+        }
+      }
+    }
+
+    expiringBatches.sort((a, b) => a.daysRemaining - b.daysRemaining);
+    const nearExpiryBatchesCount = expiringBatches.filter((b) => b.daysRemaining >= 0).length;
+    const expiredBatchesCount = expiringBatches.filter((b) => b.daysRemaining < 0).length;
+
     const metrics: DashboardMetrics = {
       todaySalesCount: todaySales.length,
       todaySalesAmount,
@@ -260,6 +297,8 @@ export const dashboardService = {
       todayCogs,
       todayProfitMargin,
       todayItemsSold,
+      nearExpiryBatchesCount,
+      expiredBatchesCount,
       totalSalesAmount,
       totalPaidAmount,
       totalDueAmount,
@@ -287,6 +326,7 @@ export const dashboardService = {
       recentSales: sales.slice(0, 6),
       recentPurchases: purchases.slice(0, 6),
       lowStockItems: lowStockItems.slice(0, 5),
+      expiringBatches: expiringBatches.slice(0, 10),
     };
   },
 };

@@ -112,13 +112,13 @@ export const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
         {/* Source & Destination Account Pickers */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
               From Account (Debit) *
             </label>
             <select
               value={fromAccountId}
               onChange={(e) => setFromAccountId(e.target.value)}
-              className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-xs cursor-pointer"
               required
             >
               <option value="">Select source account...</option>
@@ -129,9 +129,9 @@ export const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
               ))}
             </select>
             {selectedFromAccount && (
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Available:{' '}
-                <span className="font-semibold text-emerald-400">
+                <span className="font-semibold text-emerald-700">
                   {formatCurrency(selectedFromAccount.derivedBalance)}
                 </span>
               </p>
@@ -139,13 +139,13 @@ export const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
               To Account (Credit) *
             </label>
             <select
               value={toAccountId}
               onChange={(e) => setToAccountId(e.target.value)}
-              className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-xs cursor-pointer"
               required
             >
               <option value="">Select destination account...</option>
@@ -156,9 +156,9 @@ export const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
               ))}
             </select>
             {selectedToAccount && (
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Current:{' '}
-                <span className="font-semibold text-slate-300">
+                <span className="font-semibold text-slate-700">
                   {formatCurrency(selectedToAccount.derivedBalance)}
                 </span>
               </p>
@@ -180,7 +180,7 @@ export const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
               required
             />
             {isInsufficient && (
-              <div className="flex items-center gap-1.5 text-xs text-rose-400 mt-1">
+              <div className="flex items-center gap-1.5 text-xs text-rose-600 mt-1">
                 <AlertCircle className="w-3.5 h-3.5" />
                 <span>Exceeds available balance</span>
               </div>
@@ -188,12 +188,12 @@ export const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Transfer Date *</label>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Transfer Date *</label>
             <input
               type="date"
               value={transferDate}
               onChange={(e) => setTransferDate(e.target.value)}
-              className="w-full bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-xs cursor-pointer"
               required
             />
           </div>
@@ -201,18 +201,18 @@ export const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
 
         {/* Notes */}
         <div>
-          <label className="block text-xs font-medium text-slate-300 mb-1">Transfer Reference / Notes</label>
+          <label className="block text-xs font-medium text-slate-700 mb-1">Transfer Reference / Notes</label>
           <textarea
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="e.g., Cash deposited to Bank, ATM withdrawal, Cheque clearance..."
-            className="w-full bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-xs"
           />
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
           <Button variant="ghost" type="button" onClick={onClose}>
             Cancel
           </Button>

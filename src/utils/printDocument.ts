@@ -1,11 +1,29 @@
+import type { PrintFormat } from '../types';
+
+export interface PrintOptions {
+  format?: PrintFormat;
+  documentTitle?: string;
+}
+
 /**
  * Professional Document Printing Utility
  * Isolates printable content into an ephemeral, clean iframe to guarantee:
  * - 0 interference from modal backdrops, framer-motion transforms, or overflow constraints
  * - High-fidelity colors with exact print-color-adjust
- * - Pristine margin and pagination handling for A4 & thermal POS printers
+ * - Pristine margin and pagination handling for A4, A5 & thermal 80mm POS printers
  */
-export const printElement = (elementId: string, documentTitle: string = 'Invoice') => {
+export const printElement = (
+  elementId: string,
+  documentTitleOrOptions: string | PrintOptions = 'Invoice'
+) => {
+  const options: PrintOptions =
+    typeof documentTitleOrOptions === 'string'
+      ? { documentTitle: documentTitleOrOptions, format: 'A4' }
+      : { format: 'A4', ...documentTitleOrOptions };
+
+  const format = options.format || 'A4';
+  const documentTitle = options.documentTitle || 'Invoice';
+
   const sourceElement = document.getElementById(elementId);
   if (!sourceElement) {
     window.print();
@@ -24,7 +42,7 @@ export const printElement = (elementId: string, documentTitle: string = 'Invoice
   iframe.style.position = 'fixed';
   iframe.style.top = '-9999px';
   iframe.style.left = '-9999px';
-  iframe.style.width = '1000px';
+  iframe.style.width = format === 'THERMAL' ? '320px' : '1000px';
   iframe.style.height = '1000px';
   iframe.style.border = '0';
   iframe.title = documentTitle;
@@ -41,6 +59,75 @@ export const printElement = (elementId: string, documentTitle: string = 'Invoice
     .map((el) => el.outerHTML)
     .join('\n');
 
+  const pageCss =
+    format === 'THERMAL'
+      ? `
+        @page {
+          size: 80mm auto;
+          margin: 0mm;
+        }
+        html, body {
+          width: 76mm !important;
+          max-width: 76mm !important;
+          margin: 0 auto !important;
+          padding: 0 !important;
+          font-family: "Courier New", Courier, monospace, system-ui, sans-serif !important;
+        }
+        #${elementId} {
+          border: none !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+          padding: 2mm 3mm !important;
+          width: 76mm !important;
+          max-width: 76mm !important;
+          margin: 0 auto !important;
+          background: #ffffff !important;
+        }
+      `
+      : format === 'A5'
+      ? `
+        @page {
+          size: A5 portrait;
+          margin: 5mm 6mm;
+        }
+        html, body {
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        #${elementId} {
+          border: 1px solid #cbd5e1 !important;
+          box-shadow: none !important;
+          padding: 12px 16px !important;
+          margin: 0 auto !important;
+          width: 100% !important;
+          max-width: 148mm !important;
+          background: #ffffff !important;
+          border-radius: 6px !important;
+        }
+      `
+      : `
+        @page {
+          size: A4 portrait;
+          margin: 8mm 10mm;
+        }
+        html, body {
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        #${elementId} {
+          border: 1px solid #cbd5e1 !important;
+          box-shadow: none !important;
+          padding: 20px 24px !important;
+          margin: 0 auto !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          background: #ffffff !important;
+          border-radius: 6px !important;
+        }
+      `;
+
   doc.open();
   doc.write(`
     <!DOCTYPE html>
@@ -51,10 +138,6 @@ export const printElement = (elementId: string, documentTitle: string = 'Invoice
         <title>${documentTitle}</title>
         ${styleTags}
         <style>
-          @page {
-            size: auto;
-            margin: 10mm 12mm;
-          }
           *, *::before, *::after {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
@@ -63,9 +146,6 @@ export const printElement = (elementId: string, documentTitle: string = 'Invoice
           html, body {
             background: #ffffff !important;
             color: #0f172a !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            width: 100% !important;
             height: auto !important;
             overflow: visible !important;
             font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
@@ -77,20 +157,11 @@ export const printElement = (elementId: string, documentTitle: string = 'Invoice
           summary {
             display: none !important;
           }
-          #${elementId} {
-            border: 1px solid #cbd5e1 !important;
-            box-shadow: none !important;
-            padding: 20px 24px !important;
-            margin: 0 auto !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            background: #ffffff !important;
-            border-radius: 6px !important;
-          }
+          ${pageCss}
         </style>
       </head>
       <body>
-        <div style="width: 100%; max-width: 100%; padding: 4px;">
+        <div style="width: 100%; max-width: 100%; margin: 0; padding: 0;">
           ${sourceElement.outerHTML}
         </div>
       </body>

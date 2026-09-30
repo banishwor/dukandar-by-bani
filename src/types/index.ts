@@ -9,6 +9,9 @@ export interface BaseRecord {
   isDeleted: boolean;
 }
 
+export type PrintFormat = 'A4' | 'A5' | 'THERMAL';
+export type PrintOptionMode = 'SINGLE' | 'PROMPT';
+
 export interface Business extends BaseRecord {
   name: string;
   type?: string;
@@ -22,6 +25,8 @@ export interface Business extends BaseRecord {
   address?: string;
   allowNegativeStock?: boolean;
   enableExpiryTracking?: boolean;
+  defaultPrintFormat?: PrintFormat;
+  printOptionMode?: PrintOptionMode;
 }
 
 export type ItemType = 'PRODUCT' | 'SERVICE';
@@ -615,6 +620,27 @@ export interface CompletePurchasePayload {
   notes?: string;
 }
 
+export interface ExpiringBatchInfo {
+  itemId: string;
+  itemName: string;
+  unit: string;
+  batchNumber: string;
+  expiryDate: string;
+  mrp: number;
+  stockQuantity: number;
+  daysRemaining: number;
+  status: 'EXPIRED' | 'CRITICAL' | 'WARNING'; // EXPIRED: < 0 days, CRITICAL: 0-30 days, WARNING: 31-60 days
+}
+
+export interface DashboardPreferences {
+  showProfitPerformance: boolean; // Today's Profit & Performance card
+  showLowStock: boolean;           // Low stock warnings
+  showNearExpiry: boolean;         // Near-expiry & expired batches
+  showRecentPurchases: boolean;    // Recent vendor purchases
+  showRecentSales: boolean;        // Recent customer sales
+  showLiquidityStrip: boolean;     // Cash & account liquidity bar
+}
+
 export interface DashboardMetrics {
   todaySalesCount: number;
   todaySalesAmount: number;
@@ -629,6 +655,9 @@ export interface DashboardMetrics {
   todayCogs?: number;
   todayProfitMargin?: number;
   todayItemsSold?: number;
+  // Expiry Watchlist Metrics
+  nearExpiryBatchesCount?: number;
+  expiredBatchesCount?: number;
   // Supplier & Purchase Metrics
   thisMonthPurchasesCount?: number;
   thisMonthPurchasesAmount?: number;

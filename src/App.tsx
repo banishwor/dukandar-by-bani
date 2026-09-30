@@ -23,19 +23,15 @@ const MainAppContent: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('DASHBOARD');
   const [targetSaleId, setTargetSaleId] = useState<string | null>(null);
   const [targetPurchaseId, setTargetPurchaseId] = useState<string | null>(null);
+  const [itemFilterOverride, setItemFilterOverride] = useState<any>(undefined);
 
-  // Global keyboard shortcut: Ctrl+S or Cmd+S to launch New Sale from anywhere
-  React.useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        setCurrentTab('NEW_SALE');
-      }
-    };
+  const handleDashboardNavigate = (tab: NavTab, filter?: string) => {
+    if (tab === 'ITEMS' && filter) {
+      setItemFilterOverride(filter);
+    }
+    setCurrentTab(tab);
+  };
 
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
 
   if (isLoading) {
     return (
@@ -79,10 +75,15 @@ const MainAppContent: React.FC = () => {
   return (
     <AppShell currentTab={currentTab} onSelectTab={setCurrentTab}>
       {currentTab === 'DASHBOARD' && (
-        <DashboardView onNavigate={(tab) => setCurrentTab(tab)} />
+        <DashboardView onNavigate={handleDashboardNavigate} />
       )}
 
-      {currentTab === 'ITEMS' && <ItemsView />}
+      {currentTab === 'ITEMS' && (
+        <ItemsView
+          initialFilter={itemFilterOverride}
+          onFilterChanged={() => setItemFilterOverride(undefined)}
+        />
+      )}
 
       {currentTab === 'CUSTOMERS' && (
         <CustomersView onSelectSale={handleSelectSaleFromCustomer} />

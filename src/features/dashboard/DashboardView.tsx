@@ -1,7 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useBusiness } from '../../contexts/BusinessContext';
 import { dashboardService } from '../../services/dashboardService';
-import type { DashboardMetrics, ItemWithStock, Sale, Purchase } from '../../types';
+import {
+  dashboardPreferencesService,
+  DASHBOARD_PREFS_CHANGED_EVENT,
+} from '../../services/dashboardPreferencesService';
+import type { DashboardMetrics, ItemWithStock, Sale, Purchase, ExpiringBatchInfo, DashboardPreferences } from '../../types';
 import type { NavTab } from '../../components/layout/AppShell';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { Button } from '../../components/ui/Button';
@@ -22,10 +26,12 @@ import {
   Sparkles,
   Truck,
   Building2,
+  CalendarClock,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface DashboardViewProps {
-  onNavigate: (tab: NavTab) => void;
+  onNavigate: (tab: NavTab, filter?: string) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
@@ -34,9 +40,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
   const [recentSales, setRecentSales] = useState<Sale[]>([]);
   const [recentPurchases, setRecentPurchases] = useState<Purchase[]>([]);
   const [lowStockItems, setLowStockItems] = useState<ItemWithStock[]>([]);
+  const [expiringBatches, setExpiringBatches] = useState<ExpiringBatchInfo[]>([]);
+  const [stockTab, setStockTab] = useState<'LOW_STOCK' | 'EXPIRY'>('LOW_STOCK');
   const [loading, setLoading] = useState(true);
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
+
+  // User Dashboard Customization Preferences
+  const [preferences, setPreferences] = useState<DashboardPreferences>(() =>
+    dashboardPreferencesService.getPreferences()
+  );
+
+  useEffect(() => {
+    const handlePrefsChange = () => {
+      setPreferences(dashboardPreferencesService.getPreferences());
+    };
+    window.addEventListener(DASHBOARD_PREFS_CHANGED_EVENT, handlePrefsChange);
+    return () => window.removeEventListener(DASHBOARD_PREFS_CHANGED_EVENT, handlePrefsChange);
+  }, []);
+
+  useEffect(() => {
+    if (!preferences.showLowStock && preferences.showNearExpiry) {
+      setStockTab('EXPIRY');
+    } else if (preferences.showLowStock && !preferences.showNearExpiry) {
+      setStockTab('LOW_STOCK');
+    }
+  }, [preferences.showLowStock, preferences.showNearExpiry]);
+
+  const hasLeftCol = preferences.showRecentSales || preferences.showRecentPurchases;
+  const showStockCard = preferences.showLowStock || preferences.showNearExpiry;
+  const hasRightCol = preferences.showProfitPerformance || showStockCard;
 
   const loadDashboard = useCallback(async () => {
     if (!business) return;
@@ -47,6 +80,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
       setRecentSales(data.recentSales);
       setRecentPurchases(data.recentPurchases);
       setLowStockItems(data.lowStockItems);
+      setExpiringBatches(data.expiringBatches || []);
     } catch (err) {
       console.error('Failed to load dashboard data', err);
     } finally {
@@ -250,331 +284,508 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
       </div>
 
       {/* Phase 5 Financial Liquidity & Today's Cash Flow Strip */}
-      <div className="bg-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-800 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
-              <Building2 className="w-5 h-5" />
+      {preferences.showLiquidityStrip && (
+        <div className="bg-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-800 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Cash & Account Liquidity</h3>
+                <p className="text-xs text-slate-400">Real-time balances across cash & bank accounts</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-white">Cash & Account Liquidity</h3>
-              <p className="text-xs text-slate-400">Real-time balances across cash & bank accounts</p>
-            </div>
-          </div>
-          <button
-            onClick={() => onNavigate('ACCOUNTS')}
-            className="text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 self-start sm:self-auto"
-          >
-            Manage Accounts <ArrowUpRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
-            <span className="text-[11px] font-semibold text-slate-400 block">Total Liquid Funds</span>
-            <span className="text-base font-bold font-mono text-white mt-1 block">
-              {formatCurrency(metrics.totalLiquidFunds || 0, business?.currencySymbol)}
-            </span>
-          </div>
-
-          <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
-            <span className="text-[11px] font-semibold text-slate-400 block">Cash in Hand</span>
-            <span className="text-base font-bold font-mono text-emerald-400 mt-1 block">
-              {formatCurrency(metrics.totalCashInHand || 0, business?.currencySymbol)}
-            </span>
-          </div>
-
-          <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
-            <span className="text-[11px] font-semibold text-slate-400 block">Bank / Digital</span>
-            <span className="text-base font-bold font-mono text-blue-400 mt-1 block">
-              {formatCurrency(metrics.totalBankBalances || 0, business?.currencySymbol)}
-            </span>
-          </div>
-
-          <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
-            <span className="text-[11px] font-semibold text-slate-400 block">Today's Inflow</span>
-            <span className="text-base font-bold font-mono text-emerald-400 mt-1 block">
-              +{formatCurrency(metrics.todayMoneyIn || 0, business?.currencySymbol)}
-            </span>
-          </div>
-
-          <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
-            <span className="text-[11px] font-semibold text-slate-400 block">Today's Outflow</span>
-            <span className="text-base font-bold font-mono text-rose-400 mt-1 block">
-              -{formatCurrency(metrics.todayMoneyOut || 0, business?.currencySymbol)}
-            </span>
-          </div>
-
-          <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
-            <span className="text-[11px] font-semibold text-slate-400 block">Net Cash Flow Today</span>
-            <span
-              className={`text-base font-bold font-mono mt-1 block ${
-                (metrics.todayNetCashFlow || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
-              }`}
+            <button
+              onClick={() => onNavigate('ACCOUNTS')}
+              className="text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 self-start sm:self-auto cursor-pointer"
             >
-              {(metrics.todayNetCashFlow || 0) >= 0 ? '+' : ''}
-              {formatCurrency(metrics.todayNetCashFlow || 0, business?.currencySymbol)}
-            </span>
+              Manage Accounts <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
           </div>
-        </div>
-      </div>
 
-      {/* Main Grid: Recent Transactions (7 cols) + Low Stock & DB (5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Recent Sales (7 cols) */}
-        <div className="lg:col-span-7 space-y-6">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Recent Sales</h3>
-                <p className="text-xs text-slate-500">Latest customer invoices</p>
-              </div>
-              <button
-                onClick={() => onNavigate('SALES')}
-                className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-              >
-                View All <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
+              <span className="text-[11px] font-semibold text-slate-400 block">Total Liquid Funds</span>
+              <span className="text-base font-bold font-mono text-white mt-1 block">
+                {formatCurrency(metrics.totalLiquidFunds || 0, business?.currencySymbol)}
+              </span>
             </div>
 
-            {recentSales.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 bg-slate-50/60 rounded-2xl">
-                No sales created yet. Click "+ New Sale" to make your first transaction.
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100 -mx-2 px-2">
-                {recentSales.slice(0, 4).map((sale) => (
-                  <div
-                    key={sale.id}
-                    onClick={() => setSelectedSaleId(sale.id)}
-                    className="py-2.5 flex items-center justify-between hover:bg-slate-50/80 rounded-xl px-2 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold font-mono text-xs">
-                        {sale.invoiceNumber.split('-')[1] || 'INV'}
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900">{sale.customerNameSnapshot}</h4>
-                        <p className="text-[11px] text-slate-400 font-mono">
-                          {sale.invoiceNumber} · {formatDate(sale.saleDate || sale.createdAt)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-xs font-bold font-mono text-slate-900 block">
-                        {formatCurrency(sale.totalAmount, business?.currencySymbol)}
-                      </span>
-                      <Badge
-                        variant={
-                          sale.status === 'PAID'
-                            ? 'success'
-                            : sale.status === 'PARTIAL'
-                            ? 'warning'
-                            : 'danger'
-                        }
-                        size="sm"
-                      >
-                        {sale.status}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Recent Purchases */}
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Recent Purchases</h3>
-                <p className="text-xs text-slate-500">Latest vendor stock-in bills</p>
-              </div>
-              <button
-                onClick={() => onNavigate('PURCHASES')}
-                className="text-xs font-bold text-amber-800 hover:text-amber-900 flex items-center gap-1"
-              >
-                View All <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
+            <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
+              <span className="text-[11px] font-semibold text-slate-400 block">Cash in Hand</span>
+              <span className="text-base font-bold font-mono text-emerald-400 mt-1 block">
+                {formatCurrency(metrics.totalCashInHand || 0, business?.currencySymbol)}
+              </span>
             </div>
 
-            {recentPurchases.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 bg-slate-50/60 rounded-2xl">
-                No purchase bills recorded yet. Click "+ Purchase" to stock up inventory.
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100 -mx-2 px-2">
-                {recentPurchases.slice(0, 4).map((purchase) => (
-                  <div
-                    key={purchase.id}
-                    onClick={() => setSelectedPurchaseId(purchase.id)}
-                    className="py-2.5 flex items-center justify-between hover:bg-slate-50/80 rounded-xl px-2 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center font-bold font-mono text-xs">
-                        {purchase.purchaseNumber.split('-')[1] || 'PUR'}
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900">{purchase.supplierNameSnapshot}</h4>
-                        <p className="text-[11px] text-slate-400 font-mono">
-                          {purchase.purchaseNumber} · {formatDate(purchase.purchaseDate || purchase.createdAt)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-xs font-bold font-mono text-slate-900 block">
-                        {formatCurrency(purchase.totalAmount, business?.currencySymbol)}
-                      </span>
-                      <Badge
-                        variant={
-                          purchase.status === 'PAID'
-                            ? 'success'
-                            : purchase.status === 'PARTIAL'
-                            ? 'warning'
-                            : 'danger'
-                        }
-                        size="sm"
-                      >
-                        {purchase.status}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Low Stock Alerts & Quick Stats (5 cols) */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* Low Stock Card */}
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-                  <AlertTriangle className="w-4 h-4" />
-                </div>
-                <h3 className="text-sm font-bold text-slate-900">Low Stock Warnings</h3>
-              </div>
-              <button
-                onClick={() => onNavigate('ITEMS')}
-                className="text-xs font-bold text-blue-600 hover:text-blue-700"
-              >
-                All Items
-              </button>
+            <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
+              <span className="text-[11px] font-semibold text-slate-400 block">Bank / Digital</span>
+              <span className="text-base font-bold font-mono text-blue-400 mt-1 block">
+                {formatCurrency(metrics.totalBankBalances || 0, business?.currencySymbol)}
+              </span>
             </div>
 
-            {lowStockItems.length === 0 ? (
-              <div className="py-6 text-center text-xs text-slate-400 bg-emerald-50/50 rounded-2xl text-emerald-800 font-medium">
-                ✓ All inventory items are well-stocked!
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {lowStockItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-2xl flex items-center justify-between"
-                  >
-                    <div>
-                      <span className="text-xs font-bold text-slate-900 block">{item.name}</span>
-                      <span className="text-[11px] text-amber-800 font-medium">
-                        Alert threshold: {item.lowStockThreshold} {item.unit}
-                      </span>
-                    </div>
-                    <Badge variant="warning" size="sm">
-                      {item.currentStock} {item.unit} left
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+            <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
+              <span className="text-[11px] font-semibold text-slate-400 block">Today's Inflow</span>
+              <span className="text-base font-bold font-mono text-emerald-400 mt-1 block">
+                +{formatCurrency(metrics.todayMoneyIn || 0, business?.currencySymbol)}
+              </span>
+            </div>
 
-          {/* Today's Profit & Performance Card */}
-          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                  <TrendingUp className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">Today's Profit & Performance</h3>
-                  <p className="text-[11px] text-slate-400">Live gross earnings & margin analysis</p>
-                </div>
-              </div>
+            <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
+              <span className="text-[11px] font-semibold text-slate-400 block">Today's Outflow</span>
+              <span className="text-base font-bold font-mono text-rose-400 mt-1 block">
+                -{formatCurrency(metrics.todayMoneyOut || 0, business?.currencySymbol)}
+              </span>
+            </div>
+
+            <div className="p-3 bg-slate-800/70 rounded-2xl border border-slate-700/60">
+              <span className="text-[11px] font-semibold text-slate-400 block">Net Cash Flow Today</span>
               <span
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold font-mono ${
-                  (metrics.todayProfitMargin || 0) >= 0
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
-                    : 'bg-rose-50 text-rose-700 border border-rose-200/80'
+                className={`text-base font-bold font-mono mt-1 block ${
+                  (metrics.todayNetCashFlow || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
                 }`}
               >
-                {(metrics.todayProfitMargin || 0) >= 0 ? '+' : ''}
-                {(metrics.todayProfitMargin || 0).toFixed(1)}% Margin
+                {(metrics.todayNetCashFlow || 0) >= 0 ? '+' : ''}
+                {formatCurrency(metrics.todayNetCashFlow || 0, business?.currencySymbol)}
               </span>
-            </div>
-
-            {/* Hero Profit Metric Banner */}
-            <div className="p-4 bg-linear-to-br from-emerald-50/80 via-emerald-50/30 to-slate-50/60 border border-emerald-100 rounded-2xl">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">
-                Estimated Gross Profit
-              </span>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-2xl sm:text-3xl font-extrabold text-emerald-700 font-mono tracking-tight">
-                  {formatCurrency(metrics.todayGrossProfit || 0, business?.currencySymbol)}
-                </span>
-                <span className="text-xs font-semibold text-emerald-800">
-                  from {metrics.todaySalesCount} {metrics.todaySalesCount === 1 ? 'bill' : 'bills'}
-                </span>
-              </div>
-            </div>
-
-            {/* Metric Breakdown Grid */}
-            <div className="grid grid-cols-2 gap-2.5 pt-0.5 text-xs">
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                <span className="text-[11px] text-slate-400 block font-medium">Today's Sales</span>
-                <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block">
-                  {formatCurrency(metrics.todaySalesAmount, business?.currencySymbol)}
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                <span className="text-[11px] text-slate-400 block font-medium">Cost of Goods (COGS)</span>
-                <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block">
-                  {formatCurrency(metrics.todayCogs || 0, business?.currencySymbol)}
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                <span className="text-[11px] text-slate-400 block font-medium">Items Sold Today</span>
-                <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block">
-                  {metrics.todayItemsSold || 0} units
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                <span className="text-[11px] text-slate-400 block font-medium">Cash Collected</span>
-                <span className="text-sm font-bold font-mono text-emerald-600 mt-0.5 block">
-                  +{formatCurrency(metrics.todayMoneyIn || 0, business?.currencySymbol)}
-                </span>
-              </div>
-            </div>
-
-            {/* Link to Detailed Sales Reports */}
-            <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-100">
-              <span className="text-[11px] text-slate-400 font-medium">Full business breakdown</span>
-              <button
-                onClick={() => onNavigate('REPORTS')}
-                className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 hover:underline transition-all"
-              >
-                Detailed Sales Report <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Main Grid: Recent Transactions + Stock Watchlists & Performance */}
+      {(hasLeftCol || hasRightCol) ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column: Recent Sales & Recent Purchases */}
+          {hasLeftCol && (
+            <div className={`${hasRightCol ? 'lg:col-span-7' : 'lg:col-span-12'} space-y-6`}>
+              {/* Recent Sales */}
+              {preferences.showRecentSales && (
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">Recent Sales</h3>
+                      <p className="text-xs text-slate-500">Latest customer invoices</p>
+                    </div>
+                    <button
+                      onClick={() => onNavigate('SALES')}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      View All <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {recentSales.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400 bg-slate-50/60 rounded-2xl">
+                      No sales created yet. Click "+ New Sale" to make your first transaction.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100 -mx-2 px-2">
+                      {recentSales.slice(0, 4).map((sale) => (
+                        <div
+                          key={sale.id}
+                          onClick={() => setSelectedSaleId(sale.id)}
+                          className="py-2.5 flex items-center justify-between hover:bg-slate-50/80 rounded-xl px-2 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold font-mono text-xs">
+                              {sale.invoiceNumber.split('-')[1] || 'INV'}
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-bold text-slate-900">{sale.customerNameSnapshot}</h4>
+                              <p className="text-[11px] text-slate-400 font-mono">
+                                {sale.invoiceNumber} · {formatDate(sale.saleDate || sale.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-xs font-bold font-mono text-slate-900 block">
+                              {formatCurrency(sale.totalAmount, business?.currencySymbol)}
+                            </span>
+                            <Badge
+                              variant={
+                                sale.status === 'PAID'
+                                  ? 'success'
+                                  : sale.status === 'PARTIAL'
+                                  ? 'warning'
+                                  : 'danger'
+                              }
+                              size="sm"
+                            >
+                              {sale.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Recent Purchases */}
+              {preferences.showRecentPurchases && (
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">Recent Purchases</h3>
+                      <p className="text-xs text-slate-500">Latest vendor stock-in bills</p>
+                    </div>
+                    <button
+                      onClick={() => onNavigate('PURCHASES')}
+                      className="text-xs font-bold text-amber-800 hover:text-amber-900 flex items-center gap-1 cursor-pointer"
+                    >
+                      View All <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {recentPurchases.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400 bg-slate-50/60 rounded-2xl">
+                      No purchase bills recorded yet. Click "+ Purchase" to stock up inventory.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100 -mx-2 px-2">
+                      {recentPurchases.slice(0, 4).map((purchase) => (
+                        <div
+                          key={purchase.id}
+                          onClick={() => setSelectedPurchaseId(purchase.id)}
+                          className="py-2.5 flex items-center justify-between hover:bg-slate-50/80 rounded-xl px-2 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center font-bold font-mono text-xs">
+                              {purchase.purchaseNumber.split('-')[1] || 'PUR'}
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-bold text-slate-900">{purchase.supplierNameSnapshot}</h4>
+                              <p className="text-[11px] text-slate-400 font-mono">
+                                {purchase.purchaseNumber} · {formatDate(purchase.purchaseDate || purchase.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-xs font-bold font-mono text-slate-900 block">
+                              {formatCurrency(purchase.totalAmount, business?.currencySymbol)}
+                            </span>
+                            <Badge
+                              variant={
+                                purchase.status === 'PAID'
+                                  ? 'success'
+                                  : purchase.status === 'PARTIAL'
+                                  ? 'warning'
+                                  : 'danger'
+                              }
+                              size="sm"
+                            >
+                              {purchase.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Right Column: Low Stock Alerts & Today's Profit */}
+          {hasRightCol && (
+            <div className={`${hasLeftCol ? 'lg:col-span-5' : 'lg:col-span-12'} space-y-6`}>
+              {/* Stock Attention Card: Low Stock & Near Expiry */}
+              {showStockCard && (
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-4">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    {/* Dual Tabs when both are active */}
+                    {preferences.showLowStock && preferences.showNearExpiry ? (
+                      <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl">
+                        <button
+                          type="button"
+                          onClick={() => setStockTab('LOW_STOCK')}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            stockTab === 'LOW_STOCK'
+                              ? 'bg-white text-slate-900 shadow-2xs'
+                              : 'text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Low Stock</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                              lowStockItems.length > 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'
+                            }`}
+                          >
+                            {lowStockItems.length}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setStockTab('EXPIRY')}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer relative ${
+                            stockTab === 'EXPIRY'
+                              ? 'bg-white text-slate-900 shadow-2xs'
+                              : 'text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          <CalendarClock className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Near Expiry</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                              expiringBatches.length > 0 ? 'bg-rose-100 text-rose-800 font-bold' : 'bg-slate-200 text-slate-600'
+                            }`}
+                          >
+                            {expiringBatches.length}
+                          </span>
+                          {(metrics.expiredBatchesCount || 0) > 0 && (
+                            <span className="w-2 h-2 rounded-full bg-rose-500 absolute -top-0.5 -right-0.5 animate-pulse" />
+                          )}
+                        </button>
+                      </div>
+                    ) : preferences.showLowStock ? (
+                      /* Single Header: Low Stock Warnings Only */
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                          <AlertTriangle className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-slate-900">Low Stock Warnings</h3>
+                            <span
+                              className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                                lowStockItems.length > 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'
+                              }`}
+                            >
+                              {lowStockItems.length}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400">Items below minimum reorder threshold</p>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Single Header: Near-Expiry Watchlist Only */
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                          <CalendarClock className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-slate-900">Near-Expiry Watchlist</h3>
+                            <span
+                              className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                                expiringBatches.length > 0 ? 'bg-rose-100 text-rose-800 font-bold' : 'bg-slate-200 text-slate-600'
+                              }`}
+                            >
+                              {expiringBatches.length}
+                            </span>
+                            {(metrics.expiredBatchesCount || 0) > 0 && (
+                              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400">Expiring batches requiring liquidation</p>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => onNavigate('ITEMS', (!preferences.showLowStock || stockTab === 'EXPIRY') ? 'EXPIRING' : 'LOW_STOCK')}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      Manage <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Tab 1: Low Stock Items */}
+                  {(preferences.showLowStock && (!preferences.showNearExpiry || stockTab === 'LOW_STOCK')) && (
+                    lowStockItems.length === 0 ? (
+                      <div className="py-6 text-center text-xs bg-emerald-50/50 rounded-2xl text-emerald-800 font-medium">
+                        ✓ All inventory items are well-stocked!
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {lowStockItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-2xl flex items-center justify-between"
+                          >
+                            <div>
+                              <span className="text-xs font-bold text-slate-900 block">{item.name}</span>
+                              <span className="text-[11px] text-amber-800 font-medium">
+                                Alert threshold: {item.lowStockThreshold} {item.unit}
+                              </span>
+                            </div>
+                            <Badge variant="warning" size="sm">
+                              {item.currentStock} {item.unit} left
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  )}
+
+                  {/* Tab 2: Near Expiry Batches */}
+                  {(preferences.showNearExpiry && (!preferences.showLowStock || stockTab === 'EXPIRY')) && (
+                    expiringBatches.length === 0 ? (
+                      <div className="py-6 text-center text-xs bg-emerald-50/50 rounded-2xl text-emerald-800 font-medium">
+                        ✓ All active batches have healthy shelf life (&gt; 60 days). No near-expiry stock!
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {expiringBatches.slice(0, 4).map((batch, idx) => (
+                          <div
+                            key={`${batch.itemId}-${batch.batchNumber}-${idx}`}
+                            className={`p-3 rounded-2xl border flex items-center justify-between transition-all ${
+                              batch.status === 'EXPIRED'
+                                ? 'bg-rose-50/70 border-rose-200'
+                                : batch.status === 'CRITICAL'
+                                ? 'bg-amber-50/70 border-amber-200'
+                                : 'bg-slate-50 border-slate-200'
+                            }`}
+                          >
+                            <div className="min-w-0 pr-2">
+                              <span className="text-xs font-bold text-slate-900 truncate block">
+                                {batch.itemName}
+                              </span>
+                              <span className="text-[11px] text-slate-500 font-mono">
+                                Batch: {batch.batchNumber || 'N/A'} · {batch.stockQuantity} {batch.unit} left
+                              </span>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-bold font-mono ${
+                                  batch.status === 'EXPIRED'
+                                    ? 'bg-rose-600 text-white'
+                                    : batch.status === 'CRITICAL'
+                                    ? 'bg-amber-600 text-white'
+                                    : 'bg-slate-200 text-slate-700'
+                                }`}
+                              >
+                                {batch.daysRemaining < 0
+                                  ? `Expired ${Math.abs(batch.daysRemaining)}d ago`
+                                  : batch.daysRemaining === 0
+                                  ? 'Expires Today!'
+                                  : `Expires in ${batch.daysRemaining}d`}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+
+                        <button
+                          onClick={() => onNavigate('ITEMS', 'EXPIRING')}
+                          className="w-full py-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-xs font-bold text-slate-700 border border-slate-200/90 text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-1"
+                        >
+                          <span>View All {expiringBatches.length} Expiring Items in Catalog</span>
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+
+              {/* Today's Profit & Performance Card */}
+              {preferences.showProfitPerformance && (
+                <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs p-5 sm:p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                        <TrendingUp className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">Today's Profit & Performance</h3>
+                        <p className="text-[11px] text-slate-400">Live gross earnings & margin analysis</p>
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold font-mono ${
+                        (metrics.todayProfitMargin || 0) >= 0
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
+                          : 'bg-rose-50 text-rose-700 border border-rose-200/80'
+                      }`}
+                    >
+                      {(metrics.todayProfitMargin || 0) >= 0 ? '+' : ''}
+                      {(metrics.todayProfitMargin || 0).toFixed(1)}% Margin
+                    </span>
+                  </div>
+
+                  {/* Hero Profit Metric Banner */}
+                  <div className="p-4 bg-linear-to-br from-emerald-50/80 via-emerald-50/30 to-slate-50/60 border border-emerald-100 rounded-2xl">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">
+                      Estimated Gross Profit
+                    </span>
+                    <div className="flex items-baseline justify-between mt-1">
+                      <span className="text-2xl sm:text-3xl font-extrabold text-emerald-700 font-mono tracking-tight">
+                        {formatCurrency(metrics.todayGrossProfit || 0, business?.currencySymbol)}
+                      </span>
+                      <span className="text-xs font-semibold text-emerald-800">
+                        from {metrics.todaySalesCount} {metrics.todaySalesCount === 1 ? 'bill' : 'bills'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Metric Breakdown Grid */}
+                  <div className="grid grid-cols-2 gap-2.5 pt-0.5 text-xs">
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                      <span className="text-[11px] text-slate-400 block font-medium">Today's Sales</span>
+                      <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block">
+                        {formatCurrency(metrics.todaySalesAmount, business?.currencySymbol)}
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                      <span className="text-[11px] text-slate-400 block font-medium">Cost of Goods (COGS)</span>
+                      <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block">
+                        {formatCurrency(metrics.todayCogs || 0, business?.currencySymbol)}
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                      <span className="text-[11px] text-slate-400 block font-medium">Items Sold Today</span>
+                      <span className="text-sm font-bold font-mono text-slate-800 mt-0.5 block">
+                        {metrics.todayItemsSold || 0} units
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                      <span className="text-[11px] text-slate-400 block font-medium">Cash Collected</span>
+                      <span className="text-sm font-bold font-mono text-emerald-600 mt-0.5 block">
+                        +{formatCurrency(metrics.todayMoneyIn || 0, business?.currencySymbol)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Link to Detailed Sales Reports */}
+                  <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-100">
+                    <span className="text-[11px] text-slate-400 font-medium">Full business breakdown</span>
+                    <button
+                      onClick={() => onNavigate('REPORTS')}
+                      className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 hover:underline transition-all cursor-pointer"
+                    >
+                      Detailed Sales Report <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="p-8 text-center bg-white rounded-3xl border border-dashed border-slate-200 text-slate-400 space-y-2">
+          <SlidersHorizontal className="w-8 h-8 text-slate-300 mx-auto" />
+          <h4 className="text-sm font-bold text-slate-700">Dashboard Widgets Hidden</h4>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            All lower dashboard widgets are turned off. You can customize which cards to show anytime in Settings.
+          </p>
+          <button
+            onClick={() => onNavigate('SETTINGS')}
+            className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline pt-1 inline-block cursor-pointer"
+          >
+            Customize in Settings &rarr;
+          </button>
+        </div>
+      )}
 
       {/* Sale Detail Modal */}
       <SaleDetailModal

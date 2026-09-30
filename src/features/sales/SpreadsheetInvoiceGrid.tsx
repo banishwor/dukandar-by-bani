@@ -26,6 +26,8 @@ interface SpreadsheetInvoiceGridProps {
   businessId?: string;
   onUpdateCart: (newCart: SaleCartLine[]) => void;
   onItemRestocked?: (updatedItem: ItemWithStock) => void;
+  onFocusOverallDiscount?: () => void;
+  onClearCart?: () => void;
 }
 
 export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
@@ -36,6 +38,8 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
   businessId,
   onUpdateCart,
   onItemRestocked,
+  onFocusOverallDiscount,
+  onClearCart,
 }) => {
   // Row search state
   const [activeSearchRowIndex, setActiveSearchRowIndex] = useState<number | null>(null);
@@ -614,6 +618,51 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
     onUpdateCart(filtered);
   };
 
+  // Clear all items and reset to 1 empty line
+  const handleClearCart = useCallback(() => {
+    if (onClearCart) {
+      onClearCart();
+    } else {
+      const resetCart: SaleCartLine[] = [
+        {
+          itemId: '',
+          name: '',
+          unit: 'pcs',
+          rate: 0,
+          quantity: 1,
+          discountType: 'NONE' as DiscountType,
+          discountValue: 0,
+          discountAmount: 0,
+          taxAmount: 0,
+          trackInventory: false,
+          availableStock: 0,
+          expiryDate: '',
+          batchNumber: '',
+        },
+      ];
+      cartRef.current = resetCart;
+      onUpdateCart(resetCart);
+    }
+    setActiveSearchRowIndex(0);
+    setSearchQuery('');
+    setTimeout(() => {
+      itemInputRefs.current[0]?.focus();
+      itemInputRefs.current[0]?.select();
+    }, 50);
+  }, [onClearCart, onUpdateCart]);
+
+  // Global Alt+C shortcut to clear items
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === 'c' || e.key === 'C')) {
+        e.preventDefault();
+        handleClearCart();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [handleClearCart]);
+
   // Handle keyboard shortcut row deletion (Ctrl+Delete or Alt+Backspace)
   const handleRowKeyDown = (e: React.KeyboardEvent, rowIndex: number) => {
     if (
@@ -710,12 +759,12 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
                   }`}
                 >
                   {/* Row Number */}
-                  <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-400">
+                  <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-400 align-top pt-4">
                     {rowIndex + 1}
                   </td>
 
                   {/* Item Name Cell */}
-                  <td className="py-2.5 px-3 relative">
+                  <td className="py-2.5 px-3 relative align-top">
                     <div className="relative">
                       <input
                         ref={(el) => (itemInputRefs.current[rowIndex] = el)}
@@ -781,48 +830,50 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
                             setIsExplicitOpen(false);
                           }
                         }}
-                        className={`w-full h-9 px-3 rounded-xl border text-xs font-semibold transition-all ${
+                        className={`w-full h-8 px-2.5 rounded-lg border text-xs font-semibold transition-all ${
                           isSearchingThisRow
                             ? 'border-blue-600 ring-2 ring-blue-500/20 bg-white text-slate-900 shadow-sm'
                             : line.itemId || line.isNewItem
-                            ? 'border-transparent bg-transparent text-slate-900 font-bold hover:border-slate-200'
+                            ? 'border-slate-200 bg-white text-slate-900 font-bold hover:border-slate-300'
                             : 'border-dashed border-slate-300 bg-white text-slate-400'
                         } focus:outline-hidden`}
                       />
                     </div>
 
-                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                      {hasStockWarning && (
-                        <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md font-medium inline-flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
-                          {line.availableStock <= 0
-                            ? `Out of stock (stock will be -${line.quantity})`
-                            : `Exceeds stock: ${line.availableStock} (stock will be -${line.quantity - line.availableStock})`}
-                        </span>
-                      )}
-                      {line.itemId && line.trackInventory && businessId && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const matchedItem = items.find((it) => it.id === line.itemId);
-                            if (matchedItem) {
-                              setQuickRestockState({ item: matchedItem, rowIndex });
-                            }
-                          }}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
-                          title="Quick restock: add stock received at counter"
-                        >
-                          <PackagePlus className="w-3 h-3 text-blue-600" />
-                          + Restock
-                        </button>
-                      )}
-                    </div>
+                    {(hasStockWarning || (line.itemId && line.trackInventory && businessId)) && (
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                        {hasStockWarning && (
+                          <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md font-medium inline-flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                            {line.availableStock <= 0
+                              ? `Out of stock`
+                              : `Stock: ${line.availableStock}`}
+                          </span>
+                        )}
+                        {line.itemId && line.trackInventory && businessId && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const matchedItem = items.find((it) => it.id === line.itemId);
+                              if (matchedItem) {
+                                setQuickRestockState({ item: matchedItem, rowIndex });
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                            title="Quick restock: add stock received at counter"
+                          >
+                            <PackagePlus className="w-3 h-3 text-blue-600" />
+                            + Restock
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
 
                   {/* Expiry Date Column */}
                   {enableExpiryTracking && (
-                    <td className="py-2.5 px-2 text-center">
+                    <td className="py-2.5 px-2 text-center align-top">
                       <input
                         ref={(el) => (expInputRefs.current[rowIndex] = el)}
                         type="text"
@@ -843,7 +894,7 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
                   )}
 
                   {/* Quantity Input */}
-                  <td className="py-2.5 px-2 text-center">
+                  <td className="py-2.5 px-2 text-center align-top">
                     <input
                       ref={(el) => (qtyInputRefs.current[rowIndex] = el)}
                       type="number"
@@ -867,12 +918,12 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
                   </td>
 
                   {/* Unit Label */}
-                  <td className="py-2.5 px-2 text-center font-medium text-slate-500 text-xs">
+                  <td className="py-2.5 px-2 text-center font-medium text-slate-500 text-xs align-top pt-4">
                     {line.unit || 'pcs'}
                   </td>
 
                   {/* Price / Rate Input */}
-                  <td className="py-2.5 px-3 text-right">
+                  <td className="py-2.5 px-3 text-right align-top">
                     <div className="relative inline-block w-24">
                       <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xs">
                         {currencySymbol}
@@ -902,7 +953,7 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
                   </td>
 
                   {/* Discount % Input */}
-                  <td className="py-2 px-1 text-center w-20">
+                  <td className="py-2.5 px-1 text-center w-20 align-top">
                     <div className="relative inline-block w-full max-w-[76px]">
                       <input
                         ref={(el) => (discPercentInputRefs.current[rowIndex] = el)}
@@ -933,7 +984,7 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
                   </td>
 
                   {/* Discount Amount Input */}
-                  <td className="py-2 px-1 text-center w-24">
+                  <td className="py-2.5 px-1 text-center w-24 align-top">
                     <div className="relative inline-block w-full max-w-[88px]">
                       <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-[10px] pointer-events-none select-none">
                         {currencySymbol}
@@ -956,8 +1007,19 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
                             e.preventDefault();
                             advanceToNextRow(rowIndex);
                           } else if (e.key === 'Tab' && !e.shiftKey) {
-                            e.preventDefault();
-                            advanceToNextRow(rowIndex);
+                            const current = cartRef.current.length > 0 ? cartRef.current : cart;
+                            if (rowIndex < current.length - 1) {
+                              e.preventDefault();
+                              const nextIdx = rowIndex + 1;
+                              itemInputRefs.current[nextIdx]?.focus();
+                              setActiveSearchRowIndex(nextIdx);
+                              setSearchQuery('');
+                            } else {
+                              if (onFocusOverallDiscount) {
+                                e.preventDefault();
+                                onFocusOverallDiscount();
+                              }
+                            }
                           }
                         }}
                         className="w-full h-8 pl-4 pr-1 text-right font-mono font-bold text-xs border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-50 disabled:text-slate-300"
@@ -966,7 +1028,7 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
                   </td>
 
                   {/* Net Amount */}
-                  <td className="py-2.5 px-3 text-right">
+                  <td className="py-2.5 px-3 text-right align-top pt-4">
                     <span className="font-mono font-bold text-slate-900 text-xs block">
                       {formatCurrency(lineNet, currencySymbol)}
                     </span>
@@ -978,7 +1040,7 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
                   </td>
 
                   {/* Delete Row Button */}
-                  <td className="py-2.5 px-2 text-center">
+                  <td className="py-2.5 px-2 text-center align-top pt-2.5">
                     <button
                       type="button"
                       onClick={() => handleDeleteRow(rowIndex)}
@@ -998,7 +1060,7 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
           <tfoot>
             <tr className="bg-slate-50/80 border-t border-slate-200 text-xs font-bold text-slate-700">
               <td colSpan={2} className="py-3 px-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 flex-wrap">
                   <button
                     type="button"
                     onClick={handleAddNewRow}
@@ -1007,6 +1069,19 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Row (Enter)</span>
                   </button>
+
+                  {cart.some((l) => Boolean(l.itemId || l.name?.trim())) && (
+                    <button
+                      type="button"
+                      onClick={handleClearCart}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-2xs"
+                      title="Clear all items in cart (Alt+C)"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Clear Items (Alt+C)</span>
+                    </button>
+                  )}
+
                   <span className="text-[11px] text-slate-400 font-normal hidden sm:inline">
                     {totalItemsCount} item{totalItemsCount === 1 ? '' : 's'} · <kbd className="text-[10px] font-mono bg-white px-1 py-0.5 border rounded">Ctrl+Del</kbd> to delete row
                   </span>

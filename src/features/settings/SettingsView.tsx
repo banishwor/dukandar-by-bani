@@ -4,10 +4,33 @@ import { useToast } from '../../components/ui/Toast';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
-import { Store, ShieldCheck, Save, Trash2, Smartphone, Database, Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
+import {
+  Store,
+  ShieldCheck,
+  Save,
+  Trash2,
+  Smartphone,
+  Database,
+  Sparkles,
+  CheckCircle2,
+  AlertTriangle,
+  LayoutDashboard,
+  RotateCcw,
+  TrendingUp,
+  CalendarClock,
+  Receipt,
+  Truck,
+  Building2,
+  Sliders,
+  Printer,
+  FileText,
+  File,
+} from 'lucide-react';
 import { db } from '../../db/database';
 import { DataIntegrityRunner } from './DataIntegrityRunner';
 import { sampleDataService, type SampleDataSummary } from '../../services/sampleDataService';
+import { dashboardPreferencesService } from '../../services/dashboardPreferencesService';
+import type { DashboardPreferences, PrintFormat, PrintOptionMode } from '../../types';
 
 export const SettingsView: React.FC = () => {
   const { business, updateBusiness, deviceId } = useBusiness();
@@ -22,9 +45,29 @@ export const SettingsView: React.FC = () => {
   const [currencyCode, setCurrencyCode] = useState('INR');
   const [allowNegativeStock, setAllowNegativeStock] = useState(true);
   const [enableExpiryTracking, setEnableExpiryTracking] = useState(false);
+  const [defaultPrintFormat, setDefaultPrintFormat] = useState<PrintFormat>('A4');
+  const [printOptionMode, setPrintOptionMode] = useState<PrintOptionMode>('SINGLE');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSampleData, setIsLoadingSampleData] = useState(false);
   const [sampleLoadedSummary, setSampleLoadedSummary] = useState<SampleDataSummary | null>(null);
+
+  // Dashboard Preferences State
+  const [dashboardPrefs, setDashboardPrefs] = useState<DashboardPreferences>(() =>
+    dashboardPreferencesService.getPreferences()
+  );
+
+  const handleToggleDashboardPref = (key: keyof DashboardPreferences, value: boolean) => {
+    const updated = { ...dashboardPrefs, [key]: value };
+    setDashboardPrefs(updated);
+    dashboardPreferencesService.savePreferences(updated);
+    showSuccess('Dashboard preference updated');
+  };
+
+  const handleResetDashboardPrefs = () => {
+    const defaults = dashboardPreferencesService.resetPreferences();
+    setDashboardPrefs(defaults);
+    showSuccess('Dashboard preferences reset to default');
+  };
 
   useEffect(() => {
     if (business) {
@@ -37,8 +80,42 @@ export const SettingsView: React.FC = () => {
       setCurrencyCode(business.currencyCode || 'INR');
       setAllowNegativeStock(business.allowNegativeStock !== false);
       setEnableExpiryTracking(business.enableExpiryTracking === true);
+      setDefaultPrintFormat(business.defaultPrintFormat || 'A4');
+      setPrintOptionMode(business.printOptionMode || 'SINGLE');
     }
   }, [business]);
+
+  const handleToggleNegativeStock = async (checked: boolean) => {
+    setAllowNegativeStock(checked);
+    if (business) {
+      await updateBusiness({ allowNegativeStock: checked });
+      showSuccess(checked ? 'Negative stock billing enabled' : 'Negative stock billing disabled');
+    }
+  };
+
+  const handleToggleExpiryTracking = async (checked: boolean) => {
+    setEnableExpiryTracking(checked);
+    if (business) {
+      await updateBusiness({ enableExpiryTracking: checked });
+      showSuccess(checked ? 'Expiry tracking enabled' : 'Expiry tracking disabled');
+    }
+  };
+
+  const handleUpdatePrintFormat = async (format: PrintFormat) => {
+    setDefaultPrintFormat(format);
+    if (business) {
+      await updateBusiness({ defaultPrintFormat: format });
+      showSuccess(`Default print format updated to ${format === 'THERMAL' ? 'Thermal (80mm)' : format}`);
+    }
+  };
+
+  const handleUpdatePrintOptionMode = async (mode: PrintOptionMode) => {
+    setPrintOptionMode(mode);
+    if (business) {
+      await updateBusiness({ printOptionMode: mode });
+      showSuccess(mode === 'PROMPT' ? 'Prompt format selection enabled' : 'Fast 1-click print enabled');
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +136,8 @@ export const SettingsView: React.FC = () => {
         currencyCode: currencyCode.trim() || 'INR',
         allowNegativeStock,
         enableExpiryTracking,
+        defaultPrintFormat,
+        printOptionMode,
       });
       showSuccess('Business profile updated');
     } catch (err) {
@@ -187,46 +266,6 @@ export const SettingsView: React.FC = () => {
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
             />
           </div>
-
-          {/* Real-World Retail POS Policy: Negative Stock Billing */}
-          <div className="pt-2">
-            <label className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-all">
-              <input
-                type="checkbox"
-                checked={allowNegativeStock}
-                onChange={(e) => setAllowNegativeStock(e.target.checked)}
-                className="mt-0.5 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
-              />
-              <div>
-                <span className="text-xs font-bold text-slate-800 block">
-                  Allow Negative Stock Sales (Real-World Retail Mode)
-                </span>
-                <span className="text-[11px] text-slate-500 block mt-0.5">
-                  Allows cashiers to bill items even if current stock is 0 or unrecorded. Stock balances will automatically reconcile when purchases are recorded later.
-                </span>
-              </div>
-            </label>
-          </div>
-
-          {/* Expiry Tracking Feature Toggle */}
-          <div className="pt-1">
-            <label className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-all">
-              <input
-                type="checkbox"
-                checked={enableExpiryTracking}
-                onChange={(e) => setEnableExpiryTracking(e.target.checked)}
-                className="mt-0.5 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
-              />
-              <div>
-                <span className="text-xs font-bold text-slate-800 block">
-                  Enable Expiry Date Tracking (FMCG, Grocery, Dairy & Pharma)
-                </span>
-                <span className="text-[11px] text-slate-500 block mt-0.5">
-                  Shows an "EXP. DATE" column in the billing register and enables per-batch expiration monitoring. Disable this if your store sells apparel, hardware, or non-perishables.
-                </span>
-              </div>
-            </label>
-          </div>
         </div>
 
         <div className="flex items-center justify-between pt-4 border-t border-slate-100">
@@ -238,6 +277,336 @@ export const SettingsView: React.FC = () => {
           </Button>
         </div>
       </form>
+
+      {/* Store & Register Preferences Card */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs p-6 sm:p-7 space-y-6">
+        <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+          <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold shadow-xs">
+            <Sliders className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900">Store & Register Preferences</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Unified controls for inventory policies, register behavior, and invoice printing
+            </p>
+          </div>
+        </div>
+
+        {/* Section 1: Selling & Inventory Policies */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            Selling & Inventory Policies
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label className={`flex items-start gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              allowNegativeStock ? 'border-blue-200 bg-blue-50/40' : 'border-slate-200 bg-slate-50/60 hover:bg-slate-50'
+            }`}>
+              <input
+                type="checkbox"
+                checked={allowNegativeStock}
+                onChange={(e) => handleToggleNegativeStock(e.target.checked)}
+                className="mt-0.5 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+              />
+              <div>
+                <span className="text-xs font-bold text-slate-800 block">
+                  Allow Negative Stock Sales
+                </span>
+                <span className="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
+                  Allows cashiers to bill items even if current recorded stock is 0. Stock balances will reconcile when purchase bills are added.
+                </span>
+              </div>
+            </label>
+
+            <label className={`flex items-start gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              enableExpiryTracking ? 'border-blue-200 bg-blue-50/40' : 'border-slate-200 bg-slate-50/60 hover:bg-slate-50'
+            }`}>
+              <input
+                type="checkbox"
+                checked={enableExpiryTracking}
+                onChange={(e) => handleToggleExpiryTracking(e.target.checked)}
+                className="mt-0.5 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+              />
+              <div>
+                <span className="text-xs font-bold text-slate-800 block">
+                  Enable Expiry Date Tracking
+                </span>
+                <span className="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
+                  Shows expiry date inputs on the POS register and monitors perishable batches (FMCG, Grocery, Dairy & Pharma).
+                </span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* Section 2: Invoice & Receipt Printing Preferences */}
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center gap-2">
+            <Printer className="w-4 h-4 text-slate-500" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Invoice & Receipt Print Preferences
+            </h3>
+          </div>
+
+          <div className="space-y-4">
+            {/* Format selection */}
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-2">
+                Default Print Format
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  {
+                    format: 'A4' as const,
+                    title: 'A4 Full Page',
+                    desc: 'Standard desktop / laser / inkjet retail tax invoice',
+                    icon: FileText,
+                  },
+                  {
+                    format: 'A5' as const,
+                    title: 'A5 Half Page',
+                    desc: 'Compact paper-saver retail invoice',
+                    icon: File,
+                  },
+                  {
+                    format: 'THERMAL' as const,
+                    title: 'Thermal (80mm)',
+                    desc: 'High-speed POS thermal receipt roll',
+                    icon: Receipt,
+                  },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isSelected = defaultPrintFormat === item.format;
+                  return (
+                    <button
+                      key={item.format}
+                      type="button"
+                      onClick={() => handleUpdatePrintFormat(item.format)}
+                      className={`flex flex-col text-left p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-blue-600 bg-blue-50/50 shadow-xs ring-1 ring-blue-500'
+                          : 'border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1.5">
+                        <span className={`text-xs font-bold flex items-center gap-1.5 ${
+                          isSelected ? 'text-blue-900' : 'text-slate-800'
+                        }`}>
+                          <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
+                          {item.title}
+                        </span>
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-blue-600" />
+                        )}
+                      </div>
+                      <span className="text-[11px] text-slate-500 leading-snug">
+                        {item.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Workflow Mode selection */}
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-2">
+                Print Action Workflow
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleUpdatePrintOptionMode('SINGLE')}
+                  className={`flex flex-col text-left p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                    printOptionMode === 'SINGLE'
+                      ? 'border-blue-600 bg-blue-50/50 shadow-xs ring-1 ring-blue-500'
+                      : 'border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full mb-1">
+                    <span className={`text-xs font-bold ${
+                      printOptionMode === 'SINGLE' ? 'text-blue-900' : 'text-slate-800'
+                    }`}>
+                      Fast 1-Click Print
+                    </span>
+                    {printOptionMode === 'SINGLE' && (
+                      <span className="w-2 h-2 rounded-full bg-blue-600" />
+                    )}
+                  </div>
+                  <span className="text-[11px] text-slate-500 leading-snug">
+                    Instantly prints using your default format ({defaultPrintFormat === 'THERMAL' ? 'Thermal 80mm' : defaultPrintFormat}) without prompting.
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleUpdatePrintOptionMode('PROMPT')}
+                  className={`flex flex-col text-left p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                    printOptionMode === 'PROMPT'
+                      ? 'border-blue-600 bg-blue-50/50 shadow-xs ring-1 ring-blue-500'
+                      : 'border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full mb-1">
+                    <span className={`text-xs font-bold ${
+                      printOptionMode === 'PROMPT' ? 'text-blue-900' : 'text-slate-800'
+                    }`}>
+                      Flexible Format Selection
+                    </span>
+                    {printOptionMode === 'PROMPT' && (
+                      <span className="w-2 h-2 rounded-full bg-blue-600" />
+                    )}
+                  </div>
+                  <span className="text-[11px] text-slate-500 leading-snug">
+                    Shows format pills (A4 / A5 / Thermal) in the invoice viewer so you can easily switch or print both.
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Dashboard Customization Card */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs p-6 sm:p-7 space-y-5">
+        <div className="flex items-center justify-between gap-4 flex-wrap pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-bold shadow-xs">
+              <LayoutDashboard className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Dashboard Layout & Widgets</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Customize which financial cards and alert widgets appear on your main dashboard.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleResetDashboardPrefs}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-all cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset to Default</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          {/* 1. Today's Profit & Performance */}
+          <label className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-all">
+            <input
+              type="checkbox"
+              checked={dashboardPrefs.showProfitPerformance}
+              onChange={(e) => handleToggleDashboardPref('showProfitPerformance', e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+            />
+            <div>
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                Today's Profit & Performance
+              </span>
+              <span className="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
+                Live daily gross profit, profit margin %, COGS, and units sold.
+              </span>
+            </div>
+          </label>
+
+          {/* 2. Low Stock Alerts */}
+          <label className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-all">
+            <input
+              type="checkbox"
+              checked={dashboardPrefs.showLowStock}
+              onChange={(e) => handleToggleDashboardPref('showLowStock', e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+            />
+            <div>
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                Low Stock Warnings
+              </span>
+              <span className="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
+                Highlights products reaching or below their minimum reorder thresholds.
+              </span>
+            </div>
+          </label>
+
+          {/* 3. Near Expiry Watchlist */}
+          <label className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-all">
+            <input
+              type="checkbox"
+              checked={dashboardPrefs.showNearExpiry}
+              onChange={(e) => handleToggleDashboardPref('showNearExpiry', e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
+            />
+            <div>
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <CalendarClock className="w-3.5 h-3.5 text-rose-600" />
+                Near-Expiry Watchlist
+              </span>
+              <span className="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
+                Flags batches expiring within 60 days or already expired for fast clearance.
+              </span>
+            </div>
+          </label>
+
+          {/* 4. Recent Purchases */}
+          <label className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-all">
+            <input
+              type="checkbox"
+              checked={dashboardPrefs.showRecentPurchases}
+              onChange={(e) => handleToggleDashboardPref('showRecentPurchases', e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-amber-800 rounded border-slate-300 focus:ring-amber-700 cursor-pointer"
+            />
+            <div>
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Truck className="w-3.5 h-3.5 text-amber-800" />
+                Recent Purchases & Bills
+              </span>
+              <span className="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
+                Latest inward supplier bills, payment statuses, and inward inventory logs.
+              </span>
+            </div>
+          </label>
+
+          {/* 5. Recent Sales */}
+          <label className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-all">
+            <input
+              type="checkbox"
+              checked={dashboardPrefs.showRecentSales}
+              onChange={(e) => handleToggleDashboardPref('showRecentSales', e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+            />
+            <div>
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Receipt className="w-3.5 h-3.5 text-blue-600" />
+                Recent Sales Invoices
+              </span>
+              <span className="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
+                Latest customer invoices with payment badges and invoice numbers.
+              </span>
+            </div>
+          </label>
+
+          {/* 6. Cash & Account Liquidity */}
+          <label className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-all">
+            <input
+              type="checkbox"
+              checked={dashboardPrefs.showLiquidityStrip}
+              onChange={(e) => handleToggleDashboardPref('showLiquidityStrip', e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+            />
+            <div>
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                Cash & Account Liquidity Strip
+              </span>
+              <span className="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
+                Real-time cash in hand, bank balances, and today's net cash flow strip.
+              </span>
+            </div>
+          </label>
+        </div>
+      </div>
 
       {/* Demo & Sample Data Loading Card */}
       <div className="bg-gradient-to-br from-blue-50/80 to-indigo-50/50 rounded-3xl border border-blue-200/80 shadow-xs p-6 space-y-4">

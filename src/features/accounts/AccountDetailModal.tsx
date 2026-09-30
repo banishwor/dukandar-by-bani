@@ -164,26 +164,26 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
     <Modal isOpen={isOpen} onClose={onClose} title="Account Ledger & Details" maxWidth="lg">
       <div className="space-y-5">
         {/* Account Header Banner */}
-        <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/80 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="p-4 sm:p-5 rounded-2xl bg-linear-to-br from-slate-50 to-blue-50/40 border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold">
               <IconComponent className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-white">{account.name}</h3>
+                <h3 className="text-lg font-bold text-slate-900">{account.name}</h3>
                 {account.isDefault && (
-                  <Badge variant="success" className="text-[10px] uppercase font-bold py-0.5">
+                  <Badge variant="success" size="sm">
                     Default
                   </Badge>
                 )}
                 {account.isArchived && (
-                  <Badge variant="danger" className="text-[10px] uppercase font-bold py-0.5">
+                  <Badge variant="danger" size="sm">
                     Archived
                   </Badge>
                 )}
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 {account.type}
                 {account.bankName ? ` · ${account.bankName}` : ''}
                 {account.accountNumberLast4 ? ` (•••• ${account.accountNumberLast4})` : ''}
@@ -191,13 +191,13 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
             </div>
           </div>
 
-          <div className="text-right sm:border-l sm:border-slate-700 sm:pl-4">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
+          <div className="text-left sm:text-right sm:border-l sm:border-slate-200 sm:pl-4">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">
               Derived Ledger Balance
             </span>
             <span
-              className={`text-xl font-bold font-mono ${
-                derivedBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              className={`text-xl sm:text-2xl font-black font-mono ${
+                derivedBalance >= 0 ? 'text-slate-900' : 'text-rose-600'
               }`}
             >
               {formatCurrency(derivedBalance)}
@@ -206,10 +206,10 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
         </div>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-b border-slate-700/60 pb-3">
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-b border-slate-100 pb-3">
           {!account.isDefault && !account.isArchived && (
             <Button size="sm" variant="secondary" onClick={handleSetDefault}>
-              <Star className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+              <Star className="w-3.5 h-3.5 mr-1.5 text-amber-500" />
               Set as Default
             </Button>
           )}
@@ -242,23 +242,23 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
 
         {/* In / Out Statistics */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 bg-slate-800/60 rounded-xl border border-slate-700/50">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+          <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">
               Total Inflow (Credits)
             </span>
-            <div className="flex items-center gap-1.5 text-base font-bold text-emerald-400">
+            <div className="flex items-center gap-1.5 text-base font-black font-mono text-emerald-600">
               <ArrowDownLeft className="w-4 h-4" />
-              <span>{formatCurrency(totalIn)}</span>
+              <span>+{formatCurrency(totalIn)}</span>
             </div>
           </div>
 
-          <div className="p-3 bg-slate-800/60 rounded-xl border border-slate-700/50">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+          <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">
               Total Outflow (Debits)
             </span>
-            <div className="flex items-center gap-1.5 text-base font-bold text-rose-400">
+            <div className="flex items-center gap-1.5 text-base font-black font-mono text-rose-600">
               <ArrowUpRight className="w-4 h-4" />
-              <span>{formatCurrency(totalOut)}</span>
+              <span>-{formatCurrency(totalOut)}</span>
             </div>
           </div>
         </div>
@@ -267,8 +267,8 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
         <div>
           <div className="flex items-center justify-between mb-2.5">
             <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-blue-400" />
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              <Layers className="w-4 h-4 text-blue-600" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                 Financial Movement Ledger ({movements.length})
               </h4>
             </div>
@@ -276,45 +276,45 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
           </div>
 
           {movements.length === 0 ? (
-            <div className="p-6 text-center rounded-xl bg-slate-800/30 border border-slate-800 text-xs text-slate-400">
+            <div className="p-6 text-center rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500">
               No financial movements recorded for this account yet.
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-slate-700/80 bg-slate-900/60 max-h-72 overflow-y-auto">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white max-h-72 overflow-y-auto shadow-2xs">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-800/80 text-slate-400 font-semibold border-b border-slate-700 sticky top-0 backdrop-blur-sm">
+                <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 sticky top-0 backdrop-blur-xs">
                   <tr>
-                    <th className="py-2 px-3">Date</th>
-                    <th className="py-2 px-3">Type</th>
-                    <th className="py-2 px-3">Description</th>
-                    <th className="py-2 px-3 text-right">Amount</th>
+                    <th className="py-2.5 px-3">Date</th>
+                    <th className="py-2.5 px-3">Type</th>
+                    <th className="py-2.5 px-3">Description</th>
+                    <th className="py-2.5 px-3 text-right">Amount</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800 text-slate-300">
+                <tbody className="divide-y divide-slate-100 text-slate-700">
                   {movements.map((mov) => {
                     const isIn = mov.direction === 'IN';
                     return (
-                      <tr key={mov.id} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="py-2 px-3 text-slate-400 whitespace-nowrap">
+                      <tr key={mov.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
                           {formatDateTime(mov.movementDate)}
                         </td>
-                        <td className="py-2 px-3 whitespace-nowrap">
+                        <td className="py-2.5 px-3 whitespace-nowrap">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-tight inline-block ${
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold tracking-tight inline-block ${
                               isIn
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
                             }`}
                           >
                             {formatMovementType(mov.type)}
                           </span>
                         </td>
-                        <td className="py-2 px-3 max-w-xs truncate text-slate-300">
+                        <td className="py-2.5 px-3 max-w-xs truncate text-slate-800">
                           {mov.description || '—'}
                         </td>
                         <td
-                          className={`py-2 px-3 text-right font-bold whitespace-nowrap ${
-                            isIn ? 'text-emerald-400' : 'text-rose-400'
+                          className={`py-2.5 px-3 text-right font-black font-mono whitespace-nowrap ${
+                            isIn ? 'text-emerald-600' : 'text-rose-600'
                           }`}
                         >
                           {isIn ? '+' : '-'}
