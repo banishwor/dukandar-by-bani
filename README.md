@@ -4,10 +4,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178c6.svg)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-18.0+-61dafb.svg)](https://react.dev/)
+[![React](https://img.shields.io/badge/React-19.0+-61dafb.svg)](https://react.dev/)
 [![Dexie.js](https://img.shields.io/badge/Dexie.js-IndexedDB-orange.svg)](https://dexie.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.0+-646cff.svg)](https://vitejs.dev/)
-[![Status: 231 Passing Tests](https://img.shields.io/badge/Tests-231%20Passing-brightgreen.svg)]()
+[![Status: 247 Passing Tests](https://img.shields.io/badge/Tests-247%20Passing-brightgreen.svg)]()
 
 ---
 
@@ -61,20 +61,20 @@ Built with an **Offline-First Architecture**, the application treats your local 
 
 ## 🛠️ Technology Stack
 
-- **Frontend Core**: React 18 + TypeScript (Strict Mode)
+- **Frontend Core**: React 19 + TypeScript
 - **Styling**: Tailwind CSS + Custom Design System tokens
 - **Local Storage Engine**: Dexie.js (IndexedDB wrapper with multi-table indexing and relational integrity)
 - **State Management & Contexts**: React Context + Custom Domain Hooks
 - **Icons**: Lucide React
 - **Build Tool**: Vite 6
-- **Testing Engine**: Built-in 231-scenario Master Verification Suite
+- **Testing Engine**: Built-in 247-scenario verification suites (231 integrity + 8 cash drawer + 8 purchase POS)
 
 ---
 
 ## 💻 Getting Started Locally
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (version 18.0.0 or higher recommended)
+- [Node.js](https://nodejs.org/) (version 20 or higher recommended; CI uses Node 22)
 - [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
 
 ### 1. Clone the Repository
@@ -102,11 +102,10 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### 5. Run Verification Test Suite
-To run the complete 231-test master integrity verification suite:
+To run the complete 247-test verification suites (231 integrity + 8 cash drawer + 8 purchase POS):
 ```bash
-npm run test:runner
-# or
-npx tsx src/scripts/testRunner.ts
+npm test
+# or run a single suite: npm run test:integrity / npm run test:cash-drawer / npm run test:purchase-pos
 ```
 
 ### 6. Build for Production
