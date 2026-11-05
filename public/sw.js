@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dukandar-pwa-v2';
+const CACHE_NAME = 'dukandar-pwa-v3';
 
 // Dynamically compute the base path where this service worker is located (supports GitHub Pages subpaths!)
 const BASE_PATH = self.location.pathname.substring(
@@ -16,16 +16,23 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
+  // Do NOT skipWaiting automatically: when a previous version is running,
+  // this worker waits until the user accepts the in-app update prompt
+  // (which posts SKIP_WAITING), so nobody is reloaded mid-invoice.
   event.waitUntil(
     caches
       .open(CACHE_NAME)
       .then((cache) => cache.addAll(ASSETS_TO_CACHE))
-      .then(() => self.skipWaiting())
       .catch((err) => {
         console.warn('SW pre-cache warning, proceeding with network fallback', err);
-        return self.skipWaiting();
       })
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (event) => {

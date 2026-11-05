@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BusinessProvider, useBusiness } from './contexts/BusinessContext';
 import { ToastProvider } from './components/ui/Toast';
+import { UpdatePrompt } from './components/ui/UpdatePrompt';
 import { BusinessSetupWizard } from './features/setup/BusinessSetupWizard';
 import { AppShell, type NavTab } from './components/layout/AppShell';
 import { DashboardView } from './features/dashboard/DashboardView';
@@ -18,6 +19,22 @@ import { SyncReadinessView } from './features/sync/SyncReadinessView';
 import { SettingsView } from './features/settings/SettingsView';
 import { Store, Loader2 } from 'lucide-react';
 
+const NAV_TABS: NavTab[] = [
+  'DASHBOARD',
+  'SALES',
+  'NEW_SALE',
+  'PURCHASES',
+  'NEW_PURCHASE',
+  'EXPENSES',
+  'ACCOUNTS',
+  'REPORTS',
+  'ITEMS',
+  'CUSTOMERS',
+  'SUPPLIERS',
+  'SYNC',
+  'SETTINGS',
+];
+
 const MainAppContent: React.FC = () => {
   const { business, isLoading } = useBusiness();
   const [currentTab, setCurrentTab] = useState<NavTab>('DASHBOARD');
@@ -25,11 +42,41 @@ const MainAppContent: React.FC = () => {
   const [targetPurchaseId, setTargetPurchaseId] = useState<string | null>(null);
   const [itemFilterOverride, setItemFilterOverride] = useState<any>(undefined);
 
+  // Tab navigation is mirrored into browser history so the Android/browser
+  // Back button steps back through visited tabs instead of leaving the app.
+  useEffect(() => {
+    if (!window.history.state?.dukandarTab) {
+      window.history.replaceState({ dukandarTab: 'DASHBOARD' }, '');
+    }
+    const handlePopState = (event: PopStateEvent) => {
+      const tab = event.state?.dukandarTab as NavTab | undefined;
+      if (tab && NAV_TABS.includes(tab)) {
+        setCurrentTab(tab);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const currentTabRef = useRef<NavTab>('DASHBOARD');
+
+  useEffect(() => {
+    currentTabRef.current = currentTab;
+  }, [currentTab]);
+
+  const navigateToTab = useCallback((tab: NavTab) => {
+    if (currentTabRef.current !== tab) {
+      window.history.pushState({ dukandarTab: tab }, '');
+      currentTabRef.current = tab;
+    }
+    setCurrentTab(tab);
+  }, []);
+
   const handleDashboardNavigate = (tab: NavTab, filter?: string) => {
     if (tab === 'ITEMS' && filter) {
       setItemFilterOverride(filter);
     }
-    setCurrentTab(tab);
+    navigateToTab(tab);
   };
 
 
@@ -54,26 +101,26 @@ const MainAppContent: React.FC = () => {
 
   const handleSaleCompleted = (saleId: string) => {
     setTargetSaleId(saleId);
-    setCurrentTab('SALES');
+    navigateToTab('SALES');
   };
 
   const handleSelectSaleFromCustomer = (saleId: string) => {
     setTargetSaleId(saleId);
-    setCurrentTab('SALES');
+    navigateToTab('SALES');
   };
 
   const handlePurchaseCompleted = (purchaseId: string) => {
     setTargetPurchaseId(purchaseId);
-    setCurrentTab('PURCHASES');
+    navigateToTab('PURCHASES');
   };
 
   const handleSelectPurchaseFromSupplier = (purchaseId: string) => {
     setTargetPurchaseId(purchaseId);
-    setCurrentTab('PURCHASES');
+    navigateToTab('PURCHASES');
   };
 
   return (
-    <AppShell currentTab={currentTab} onSelectTab={setCurrentTab}>
+    <AppShell currentTab={currentTab} onSelectTab={navigateToTab}>
       {currentTab === 'DASHBOARD' && (
         <DashboardView onNavigate={handleDashboardNavigate} />
       )}
@@ -95,7 +142,7 @@ const MainAppContent: React.FC = () => {
 
       {currentTab === 'SALES' && (
         <SalesView
-          onNewSaleClick={() => setCurrentTab('NEW_SALE')}
+          onNewSaleClick={() => navigateToTab('NEW_SALE')}
           initialSelectedSaleId={targetSaleId}
         />
       )}
@@ -103,13 +150,13 @@ const MainAppContent: React.FC = () => {
       {currentTab === 'NEW_SALE' && (
         <NewSaleView
           onSaleCompleted={handleSaleCompleted}
-          onCancel={() => setCurrentTab('SALES')}
+          onCancel={() => navigateToTab('SALES')}
         />
       )}
 
       {currentTab === 'PURCHASES' && (
         <PurchasesView
-          onNewPurchaseClick={() => setCurrentTab('NEW_PURCHASE')}
+          onNewPurchaseClick={() => navigateToTab('NEW_PURCHASE')}
           initialSelectedPurchaseId={targetPurchaseId}
         />
       )}
@@ -117,7 +164,7 @@ const MainAppContent: React.FC = () => {
       {currentTab === 'NEW_PURCHASE' && (
         <NewPurchaseView
           onPurchaseCompleted={handlePurchaseCompleted}
-          onCancel={() => setCurrentTab('PURCHASES')}
+          onCancel={() => navigateToTab('PURCHASES')}
         />
       )}
 
@@ -139,6 +186,7 @@ export default function App() {
     <BusinessProvider>
       <ToastProvider>
         <MainAppContent />
+        <UpdatePrompt />
       </ToastProvider>
     </BusinessProvider>
   );

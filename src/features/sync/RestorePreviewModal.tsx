@@ -148,6 +148,7 @@ export const RestorePreviewModal: React.FC<RestorePreviewModalProps> = ({
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close dialog"
               className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
             >
               <X className="w-5 h-5" />

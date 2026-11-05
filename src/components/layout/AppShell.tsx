@@ -364,6 +364,8 @@ export const AppShell: React.FC<AppShellProps> = ({
                   : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
               }`}
               title="Lock screen with Privacy Mode (F9 / Alt+H)"
+              aria-label="Toggle privacy mode"
+              aria-pressed={isPrivacyActive}
             >
               {isPrivacyActive ? (
                 <EyeOff className="w-3.5 h-3.5 text-white animate-pulse" />

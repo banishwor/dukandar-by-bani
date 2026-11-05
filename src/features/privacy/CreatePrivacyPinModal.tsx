@@ -69,6 +69,7 @@ export const CreatePrivacyPinModal: React.FC<CreatePrivacyPinModalProps> = ({
       <div className="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl border border-slate-100 relative space-y-5">
         <button
           onClick={onClose}
+          aria-label="Close dialog"
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors"
         >
           <X className="w-4 h-4" />

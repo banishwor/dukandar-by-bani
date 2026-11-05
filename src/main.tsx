@@ -3,13 +3,38 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
 
-// Register Service Worker for offline capability & PWA installability
+// Register Service Worker for offline capability & PWA installability.
+// When an updated worker finishes installing it waits (see sw.js); we
+// announce it with a window event and UpdatePrompt lets the user apply it.
 if ('serviceWorker' in navigator && (import.meta.env.PROD || process.env.NODE_ENV === 'production')) {
   window.addEventListener('load', () => {
     const swUrl = `${import.meta.env.BASE_URL || './'}sw.js`;
-    navigator.serviceWorker.register(swUrl).catch((err) => {
-      console.warn('SW registration failed: ', err);
-    });
+    navigator.serviceWorker
+      .register(swUrl)
+      .then((registration) => {
+        const notifyUpdateAvailable = () => {
+          window.dispatchEvent(
+            new CustomEvent('dukandar:sw-update-available', { detail: registration })
+          );
+        };
+
+        if (registration.waiting && navigator.serviceWorker.controller) {
+          notifyUpdateAvailable();
+        }
+
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              notifyUpdateAvailable();
+            }
+          });
+        });
+      })
+      .catch((err) => {
+        console.warn('SW registration failed: ', err);
+      });
   });
 }
 

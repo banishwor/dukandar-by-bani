@@ -139,6 +139,7 @@ export const PurchaseDraftTabs: React.FC<PurchaseDraftTabsProps> = ({
           onClick={onNewDraft}
           className="p-2 bg-blue-600 text-white rounded-xl shrink-0 hover:bg-blue-700 shadow-sm"
           title="New Inward Bill"
+          aria-label="New inward bill draft"
         >
           <Plus className="w-4 h-4" />
         </button>
@@ -213,6 +214,7 @@ export const PurchaseDraftTabs: React.FC<PurchaseDraftTabsProps> = ({
                           }
                           onCloseDraft(d.id);
                         }}
+                        aria-label="Discard draft"
                         className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100"
                       >
                         <X className="w-4 h-4" />

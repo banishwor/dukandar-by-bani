@@ -132,7 +132,11 @@ export const DataIntegrityRunner: React.FC = () => {
                       {r.passed ? 'PASS' : 'FAIL'}
                     </Badge>
                     {r.details && r.details.length > 0 && (
-                      <button className="text-slate-400 hover:text-slate-600">
+                      <button
+                        className="text-slate-400 hover:text-slate-600"
+                        aria-label={isExpanded ? 'Collapse test details' : 'Expand test details'}
+                        aria-expanded={isExpanded}
+                      >
                         {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                       </button>
                     )}
