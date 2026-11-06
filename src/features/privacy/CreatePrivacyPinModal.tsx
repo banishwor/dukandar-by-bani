@@ -32,7 +32,7 @@ export const CreatePrivacyPinModal: React.FC<CreatePrivacyPinModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleDigitInput = (value: string) => {
+  const handleDigitInput = async (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 4);
     setError('');
 
@@ -49,7 +49,7 @@ export const CreatePrivacyPinModal: React.FC<CreatePrivacyPinModalProps> = ({
       setConfirmPin(digits);
       if (digits.length === 4) {
         if (digits === pin) {
-          privacyService.savePin(digits);
+          await privacyService.savePin(digits);
           onPinCreated();
         } else {
           setError('PINs do not match. Please re-enter.');

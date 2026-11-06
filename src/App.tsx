@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { BusinessProvider, useBusiness } from './contexts/BusinessContext';
+import { storagePersistenceService } from './services/storagePersistenceService';
 import { ToastProvider } from './components/ui/Toast';
 import { UpdatePrompt } from './components/ui/UpdatePrompt';
 import { AppShell, type NavTab } from './components/layout/AppShell';
@@ -111,6 +112,14 @@ const MainAppContent: React.FC = () => {
   const [targetSaleId, setTargetSaleId] = useState<string | null>(null);
   const [targetPurchaseId, setTargetPurchaseId] = useState<string | null>(null);
   const [itemFilterOverride, setItemFilterOverride] = useState<any>(undefined);
+
+  // Ask the browser to protect this app's IndexedDB from automatic
+  // eviction — all shop data lives on-device, so this is the cheapest
+  // data-safety win there is. Best-effort; the real status is shown in
+  // Settings → Local Data Protection.
+  useEffect(() => {
+    void storagePersistenceService.requestPersistentStorage();
+  }, []);
 
   // Tab navigation is mirrored into browser history so the Android/browser
   // Back button steps back through visited tabs instead of leaving the app.

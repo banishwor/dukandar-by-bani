@@ -45,14 +45,14 @@ export const PrivacyLockOverlay: React.FC<PrivacyLockOverlayProps> = ({
     }
   };
 
-  const handleDigitInput = (value: string) => {
+  const handleDigitInput = async (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 4);
     setPin(digits);
     setError('');
 
     if (digits.length === 4) {
       // Auto-validate immediately upon 4 digits
-      const isValid = privacyService.verifyPin(digits);
+      const isValid = await privacyService.verifyPin(digits);
       if (isValid) {
         setFailedAttempts(0);
         privacyService.setPrivacyActive(false);

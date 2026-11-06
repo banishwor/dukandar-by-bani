@@ -1,10 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { db } from '../../db/database';
 import { useBusiness } from '../../contexts/BusinessContext';
 import { useToast } from '../../components/ui/Toast';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
+import { Modal } from '../../components/ui/Modal';
 import { GoogleBackupCard } from './GoogleBackupCard';
+import { backupSnapshotService } from '../../services/backup/backupSnapshotService';
+import { googleBackupRestoreService } from '../../services/restore/googleBackupRestoreService';
+import {
+  parseBackupFileText,
+  LEGACY_EXPORT_MESSAGE,
+} from '../../services/restore/localBackupFileService';
+import { formatDateTime } from '../../utils/formatters';
+import type { BusinessBackupSnapshot, BackupSummary } from '../../types/backup';
 import {
   Database,
   CloudOff,
@@ -16,6 +25,7 @@ import {
   Cpu,
   CheckCircle2,
   FileCode,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const SyncReadinessView: React.FC = () => {
@@ -116,85 +126,102 @@ export const SyncReadinessView: React.FC = () => {
     loadStats();
   }, []);
 
+  // Export now produces the FULL snapshot format (all 31 collections for
+  // this business only, with an integrity checksum) — the same format the
+  // Google Drive backup uses, and the only format Restore accepts. The old
+  // ad-hoc export silently omitted returns, voids, refunds, reversals and
+  // allocations and mixed every business on the device into one file.
   const handleExportBackup = async () => {
+    if (!business) {
+      showError('No active business to export');
+      return;
+    }
     try {
-      const [
-        businesses,
-        items,
-        customers,
-        suppliers,
-        sales,
-        saleLines,
-        purchases,
-        purchaseLines,
-        stockMovements,
-        payments,
-        supplierPayments,
-        financialAccounts,
-        financialMovements,
-        expenses,
-        expenseCategories,
-        accountTransfers,
-        syncMetadata,
-      ] = await Promise.all([
-        db.businesses.toArray(),
-        db.items.toArray(),
-        db.customers.toArray(),
-        db.suppliers.toArray(),
-        db.sales.toArray(),
-        db.saleLines.toArray(),
-        db.purchases.toArray(),
-        db.purchaseLines.toArray(),
-        db.stockMovements.toArray(),
-        db.payments.toArray(),
-        db.supplierPayments.toArray(),
-        db.financialAccounts.toArray(),
-        db.financialMovements.toArray(),
-        db.expenses.toArray(),
-        db.expenseCategories.toArray(),
-        db.accountTransfers.toArray(),
-        db.syncMetadata.toArray(),
-      ]);
-
-      const backup = {
-        exportedAt: new Date().toISOString(),
-        deviceId,
-        version: 5,
-        data: {
-          businesses,
-          items,
-          customers,
-          suppliers,
-          sales,
-          saleLines,
-          purchases,
-          purchaseLines,
-          stockMovements,
-          payments,
-          supplierPayments,
-          financialAccounts,
-          financialMovements,
-          expenses,
-          expenseCategories,
-          accountTransfers,
-          syncMetadata,
-        },
-      };
-
-      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backup, null, 2));
+      const snapshot = await backupSnapshotService.createBackupSnapshot(business.id);
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
       const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute('href', dataStr);
+      downloadAnchor.setAttribute('href', url);
+      const safeName = business.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
       downloadAnchor.setAttribute(
         'download',
-        `bizmanager-backup-${new Date().toISOString().slice(0, 10)}.json`
+        `dukandar-backup-${safeName}-${new Date().toISOString().slice(0, 10)}.json`
       );
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
+      URL.revokeObjectURL(url);
+      showSuccess('Full backup exported — every record type, with integrity checksum');
+    } catch (err: any) {
+      showError(err?.message || 'Failed to export database');
+    }
+  };
 
-      showSuccess('Local database exported as JSON backup');
-    } catch (err) {
-      showError('Failed to export database');
+  // ---- Restore from a local backup file --------------------------------
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [pendingSnapshot, setPendingSnapshot] = useState<BusinessBackupSnapshot | null>(null);
+  const [pendingSummary, setPendingSummary] = useState<BackupSummary | null>(null);
+  const [pendingWarnings, setPendingWarnings] = useState<string[]>([]);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreProgress, setRestoreProgress] = useState('');
+
+  const handleBackupFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-choosing the same file
+    if (!file || !business) return;
+    setImportNotice(null);
+    try {
+      const parsed = parseBackupFileText(await file.text());
+      if (parsed.kind === 'legacy') {
+        setImportNotice(LEGACY_EXPORT_MESSAGE);
+        return;
+      }
+      const snapshot = parsed.snapshot;
+      if (snapshot.metadata.businessId !== business.id) {
+        setImportNotice(
+          `This backup belongs to "${snapshot.metadata.businessName}", not "${business.name}". ` +
+            'A backup can only be restored into the same business it was exported from.'
+        );
+        return;
+      }
+      const validation = await backupSnapshotService.validateBackupSnapshot(snapshot);
+      if (!validation.isValid) {
+        setImportNotice(
+          'That backup file failed integrity checks and was not restored: ' +
+            validation.errors.map((err) => err.message).join('; ')
+        );
+        return;
+      }
+      setPendingWarnings(validation.warnings);
+      setPendingSummary(backupSnapshotService.getBackupSummary(snapshot));
+      setPendingSnapshot(snapshot);
+    } catch (err: any) {
+      setImportNotice(err?.message || 'Could not read that backup file.');
+    }
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!business || !pendingSnapshot) return;
+    setIsRestoring(true);
+    setRestoreProgress('Starting restore…');
+    try {
+      const result = await googleBackupRestoreService.executeRestore(
+        business.id,
+        pendingSnapshot,
+        (p) => setRestoreProgress(p.message)
+      );
+      setPendingSnapshot(null);
+      setPendingSummary(null);
+      await loadStats();
+      showSuccess(
+        `Backup restored: ${result.restoredRecordCount} records, financial reconciliation passed`
+      );
+    } catch (err: any) {
+      showError(err?.message || 'Restore failed');
+    } finally {
+      setIsRestoring(false);
+      setRestoreProgress('');
     }
   };
 
@@ -308,8 +335,111 @@ export const SyncReadinessView: React.FC = () => {
           <Button variant="outline" icon={Download} onClick={handleExportBackup}>
             Export Database Backup (.JSON)
           </Button>
+          <Button variant="outline" icon={Upload} onClick={() => fileInputRef.current?.click()}>
+            Restore from Backup File (.JSON)
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            aria-label="Choose a Dukandar backup JSON file to restore"
+            onChange={handleBackupFileChosen}
+          />
         </div>
+        <p className="text-[11px] text-slate-400 leading-relaxed">
+          The export is a complete backup of this business only — every record type, including
+          returns, voids, refunds and payment allocations — protected by an integrity checksum.
+          Restoring replaces this business's current data with the backup; a safety copy of the
+          current data is taken automatically first, and the restore rolls back by itself if any
+          check fails.
+        </p>
+        {importNotice && (
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-amber-800 text-xs">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="leading-relaxed">{importNotice}</p>
+          </div>
+        )}
       </div>
+
+      {/* Restore confirmation */}
+      <Modal
+        isOpen={pendingSnapshot !== null}
+        onClose={() => {
+          if (!isRestoring) {
+            setPendingSnapshot(null);
+            setPendingSummary(null);
+          }
+        }}
+        title="Restore this backup?"
+        maxWidth="md"
+      >
+        {pendingSummary && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <span className="text-slate-500 block">Business</span>
+                <strong className="text-slate-800">{pendingSummary.businessName}</strong>
+              </div>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <span className="text-slate-500 block">Backup taken</span>
+                <strong className="text-slate-800">{formatDateTime(pendingSummary.createdAt)}</strong>
+              </div>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <span className="text-slate-500 block">Total records</span>
+                <strong className="text-slate-800">{pendingSummary.totalRecords}</strong>
+              </div>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <span className="text-slate-500 block">File size</span>
+                <strong className="text-slate-800">{pendingSummary.sizeFormatted}</strong>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">
+              Includes {pendingSummary.recordCounts.items} items, {pendingSummary.recordCounts.customers}{' '}
+              customers, {pendingSummary.recordCounts.sales} sales and{' '}
+              {pendingSummary.recordCounts.purchases} purchases.
+            </p>
+            {pendingWarnings.length > 0 && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-1">
+                {pendingWarnings.slice(0, 3).map((w, i) => (
+                  <p key={i}>{w}</p>
+                ))}
+              </div>
+            )}
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 leading-relaxed">
+              This <strong>replaces all current data</strong> for this business with the backup.
+              A safety copy of the current data is created automatically before anything changes,
+              and if the post-restore financial check fails, the app rolls back to that safety copy
+              on its own.
+            </div>
+            {isRestoring && restoreProgress && (
+              <p className="text-xs font-semibold text-blue-700">{restoreProgress}</p>
+            )}
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <Button
+                variant="outline"
+                type="button"
+                disabled={isRestoring}
+                onClick={() => {
+                  setPendingSnapshot(null);
+                  setPendingSummary(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                type="button"
+                icon={Upload}
+                isLoading={isRestoring}
+                onClick={handleConfirmRestore}
+              >
+                Restore Backup
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

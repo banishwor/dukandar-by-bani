@@ -33,6 +33,11 @@ const DataIntegrityRunner = lazy(() =>
   import('./DataIntegrityRunner').then((m) => ({ default: m.DataIntegrityRunner }))
 );
 import { sampleDataService, type SampleDataSummary } from '../../services/sampleDataService';
+import {
+  storagePersistenceService,
+  formatBytes,
+  type StorageStatus,
+} from '../../services/storagePersistenceService';
 import { dashboardPreferencesService } from '../../services/dashboardPreferencesService';
 import type { DashboardPreferences, PrintFormat, PrintOptionMode } from '../../types';
 
@@ -71,6 +76,31 @@ export const SettingsView: React.FC = () => {
     const defaults = dashboardPreferencesService.resetPreferences();
     setDashboardPrefs(defaults);
     showSuccess('Dashboard preferences reset to default');
+  };
+
+  // Local data protection (IndexedDB persistence) status
+  const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null);
+  const [isRequestingStorage, setIsRequestingStorage] = useState(false);
+
+  useEffect(() => {
+    void storagePersistenceService.getStorageStatus().then(setStorageStatus);
+  }, []);
+
+  const handleRequestPersistentStorage = async () => {
+    setIsRequestingStorage(true);
+    try {
+      const granted = await storagePersistenceService.requestPersistentStorage();
+      setStorageStatus(await storagePersistenceService.getStorageStatus());
+      if (granted) {
+        showSuccess('This device now protects Dukandar data from automatic cleanup');
+      } else {
+        showError(
+          'The browser did not grant protection. Installing Dukandar to the home screen usually enables it.'
+        );
+      }
+    } finally {
+      setIsRequestingStorage(false);
+    }
   };
 
   useEffect(() => {
@@ -468,6 +498,71 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Local Data Protection Card */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs p-6 sm:p-7 space-y-4">
+        <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900">Local Data Protection</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              All shop data lives in this device's browser storage. Protected storage cannot be
+              auto-cleared by the browser when space runs low.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="space-y-1 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-700">Status:</span>
+              {storageStatus === null ? (
+                <span className="text-slate-500">Checking…</span>
+              ) : !storageStatus.supported ? (
+                <span className="text-slate-500">Not reported by this browser</span>
+              ) : storageStatus.persisted ? (
+                <span className="inline-flex items-center gap-1.5 font-bold text-emerald-700">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Protected — browser will not auto-clear this data
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 font-bold text-amber-700">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  Not protected — browser may clear data under storage pressure
+                </span>
+              )}
+            </div>
+            {storageStatus?.supported && (
+              <div className="text-slate-500">
+                Storage used: <strong className="text-slate-700">{formatBytes(storageStatus.usageBytes)}</strong>
+                {storageStatus.quotaBytes !== undefined && (
+                  <> of {formatBytes(storageStatus.quotaBytes)} available on this device</>
+                )}
+              </div>
+            )}
+          </div>
+
+          {storageStatus && storageStatus.supported && !storageStatus.persisted && (
+            <Button
+              type="button"
+              variant="primary"
+              icon={ShieldCheck}
+              isLoading={isRequestingStorage}
+              onClick={handleRequestPersistentStorage}
+            >
+              Protect My Data
+            </Button>
+          )}
+        </div>
+
+        <p className="text-[11px] text-slate-400 leading-relaxed">
+          Tip: installing Dukandar to the home screen (Add to Home Screen) makes browsers much more
+          likely to grant protection. Protection is not a backup — export a JSON backup from the Sync
+          tab regularly and keep the file somewhere safe.
+        </p>
       </div>
 
       {/* Dashboard Customization Card */}
