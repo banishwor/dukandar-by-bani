@@ -59,16 +59,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     return () => window.removeEventListener(DASHBOARD_PREFS_CHANGED_EVENT, handlePrefsChange);
   }, []);
 
+  // The Near-Expiry watchlist follows the business-wide Expiry Tracking
+  // switch first: a store that never tracks expiry sees no expiry UI here,
+  // whatever the dashboard preference says. Exception: if batches are
+  // genuinely near expiry (dates were recorded), the warning still shows.
+  const showNearExpiry =
+    preferences.showNearExpiry &&
+    (business?.enableExpiryTracking === true || expiringBatches.length > 0);
+
   useEffect(() => {
-    if (!preferences.showLowStock && preferences.showNearExpiry) {
+    if (!preferences.showLowStock && showNearExpiry) {
       setStockTab('EXPIRY');
-    } else if (preferences.showLowStock && !preferences.showNearExpiry) {
+    } else if (preferences.showLowStock && !showNearExpiry) {
       setStockTab('LOW_STOCK');
     }
-  }, [preferences.showLowStock, preferences.showNearExpiry]);
+  }, [preferences.showLowStock, showNearExpiry]);
 
   const hasLeftCol = preferences.showRecentSales || preferences.showRecentPurchases;
-  const showStockCard = preferences.showLowStock || preferences.showNearExpiry;
+  const showStockCard = preferences.showLowStock || showNearExpiry;
   const hasRightCol = preferences.showProfitPerformance || showStockCard;
 
   const loadDashboard = useCallback(async () => {
@@ -499,7 +507,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                 <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-4">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     {/* Dual Tabs when both are active */}
-                    {preferences.showLowStock && preferences.showNearExpiry ? (
+                    {preferences.showLowStock && showNearExpiry ? (
                       <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl">
                         <button
                           type="button"
@@ -598,7 +606,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                   </div>
 
                   {/* Tab 1: Low Stock Items */}
-                  {(preferences.showLowStock && (!preferences.showNearExpiry || stockTab === 'LOW_STOCK')) && (
+                  {(preferences.showLowStock && (!showNearExpiry || stockTab === 'LOW_STOCK')) && (
                     lowStockItems.length === 0 ? (
                       <div className="py-6 text-center text-xs bg-emerald-50/50 rounded-2xl text-emerald-800 font-medium">
                         ✓ All inventory items are well-stocked!
@@ -626,7 +634,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                   )}
 
                   {/* Tab 2: Near Expiry Batches */}
-                  {(preferences.showNearExpiry && (!preferences.showLowStock || stockTab === 'EXPIRY')) && (
+                  {(showNearExpiry && (!preferences.showLowStock || stockTab === 'EXPIRY')) && (
                     expiringBatches.length === 0 ? (
                       <div className="py-6 text-center text-xs bg-emerald-50/50 rounded-2xl text-emerald-800 font-medium">
                         ✓ All active batches have healthy shelf life (&gt; 60 days). No near-expiry stock!

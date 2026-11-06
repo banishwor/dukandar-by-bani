@@ -335,7 +335,7 @@ export const SettingsView: React.FC = () => {
                   Enable Expiry Date Tracking
                 </span>
                 <span className="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
-                  Shows expiry date inputs on the POS register and monitors perishable batches (FMCG, Grocery, Dairy & Pharma).
+                  Shows expiry dates across the POS register, purchases, item form and dashboard, and monitors perishable batches (FMCG, Grocery, Dairy & Pharma). Turn it off for services and non-perishable stores — expiry is hidden everywhere, except on batches that already carry a recorded date.
                 </span>
               </div>
             </label>
@@ -549,6 +549,8 @@ export const SettingsView: React.FC = () => {
               </span>
               <span className="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
                 Flags batches expiring within 60 days or already expired for fast clearance.
+                {!enableExpiryTracking &&
+                  ' Currently hidden on the dashboard because Expiry Date Tracking is off in Store & Register Preferences above.'}
               </span>
             </div>
           </label>

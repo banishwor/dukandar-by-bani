@@ -21,6 +21,7 @@ interface BatchSelectionModalProps {
   item: ItemWithStock | null;
   currencySymbol?: string;
   initialQuantity?: number;
+  enableExpiryTracking?: boolean;
   onSelectBatches: (selections: { batch: ItemBatch; quantity: number }[]) => void;
   onClose: () => void;
 }
@@ -30,9 +31,15 @@ export const BatchSelectionModal: React.FC<BatchSelectionModalProps> = ({
   item,
   currencySymbol = '₹',
   initialQuantity = 1,
+  enableExpiryTracking = false,
   onSelectBatches,
   onClose,
 }) => {
+  // Expiry language (FEFO, expiry inputs, "no expiry date" notes) only
+  // appears when the business tracks expiry — or when a batch actually
+  // carries a recorded date, which must never be hidden.
+  const showExpiryUi =
+    enableExpiryTracking || (item?.batches?.some((b) => Boolean(b.expiryDate)) ?? false);
   // Batch quantity allocations: { [batchId]: quantity }
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   
@@ -268,10 +275,12 @@ export const BatchSelectionModal: React.FC<BatchSelectionModalProps> = ({
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider px-1">
                   <span>Available Batches & Rates ({batches.length})</span>
-                  <span className="text-blue-600 font-medium normal-case flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    FEFO Recommended
-                  </span>
+                  {showExpiryUi && (
+                    <span className="text-blue-600 font-medium normal-case flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      FEFO Recommended
+                    </span>
+                  )}
                 </div>
 
                 <div className="grid gap-2.5">
@@ -312,7 +321,7 @@ export const BatchSelectionModal: React.FC<BatchSelectionModalProps> = ({
                               </span>
                               {index === 0 && (
                                 <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
-                                  Default / FEFO
+                                  {showExpiryUi ? 'Default / FEFO' : 'Default'}
                                 </span>
                               )}
                               {expiryStatus && (
@@ -331,9 +340,9 @@ export const BatchSelectionModal: React.FC<BatchSelectionModalProps> = ({
                                   <Calendar className="w-3.5 h-3.5 text-slate-400" />
                                   Exp: <strong className="text-slate-700">{batch.expiryDate}</strong>
                                 </span>
-                              ) : (
+                              ) : showExpiryUi ? (
                                 <span className="text-slate-400 italic">No expiry date</span>
-                              )}
+                              ) : null}
 
                               {cost > 0 && (
                                 <span className="text-slate-500 font-mono">
@@ -521,17 +530,19 @@ export const BatchSelectionModal: React.FC<BatchSelectionModalProps> = ({
                   />
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Expiry Date
-                  </label>
-                  <input
-                    type="date"
-                    value={customExpiry}
-                    onChange={(e) => setCustomExpiry(e.target.value)}
-                    className="w-full h-9 px-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                  />
-                </div>
+                {showExpiryUi && (
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Expiry Date
+                    </label>
+                    <input
+                      type="date"
+                      value={customExpiry}
+                      onChange={(e) => setCustomExpiry(e.target.value)}
+                      className="w-full h-9 px-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">

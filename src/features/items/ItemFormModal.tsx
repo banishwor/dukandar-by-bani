@@ -424,7 +424,9 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
               </div>
               <div>
                 <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                  Batches, Multi-MRP & Expiry Lots
+                  {business?.enableExpiryTracking || batches.some((b) => b.expiryDate)
+                    ? 'Batches, Multi-MRP & Expiry Lots'
+                    : 'Batches & Multi-MRP Lots'}
                   {batches.length > 0 && (
                     <span className="text-[10px] bg-amber-200/80 text-amber-900 font-bold px-2 py-0.5 rounded-full">
                       {batches.length} {batches.length === 1 ? 'batch' : 'batches'}
@@ -432,7 +434,9 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
                   )}
                 </h4>
                 <p className="text-[11px] text-slate-500">
-                  Manage different printed MRPs, lot numbers, or expiration dates for this product
+                  {business?.enableExpiryTracking || batches.some((b) => b.expiryDate)
+                    ? 'Manage different printed MRPs, lot numbers, or expiration dates for this product'
+                    : 'Manage different printed MRPs and lot numbers for this product'}
                 </p>
               </div>
             </div>
@@ -549,17 +553,22 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
                         />
                       </div>
 
-                      <div className="col-span-2 sm:col-span-4">
-                        <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
-                          Expiry Date (Optional)
-                        </label>
-                        <input
-                          type="date"
-                          value={batch.expiryDate || ''}
-                          onChange={(e) => handleBatchFieldChange(index, 'expiryDate', e.target.value)}
-                          className="w-full h-8 px-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                        />
-                      </div>
+                      {/* Expiry field follows the business-wide Expiry Tracking
+                          switch; a batch that already carries a date always
+                          keeps the field so recorded data stays editable. */}
+                      {(business?.enableExpiryTracking || batch.expiryDate) && (
+                        <div className="col-span-2 sm:col-span-4">
+                          <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
+                            Expiry Date (Optional)
+                          </label>
+                          <input
+                            type="date"
+                            value={batch.expiryDate || ''}
+                            onChange={(e) => handleBatchFieldChange(index, 'expiryDate', e.target.value)}
+                            className="w-full h-8 px-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

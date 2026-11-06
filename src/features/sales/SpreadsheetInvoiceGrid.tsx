@@ -1318,6 +1318,7 @@ export const SpreadsheetInvoiceGrid: React.FC<SpreadsheetInvoiceGridProps> = ({
         item={batchModalState?.item || null}
         currencySymbol={currencySymbol}
         initialQuantity={batchModalState?.initialQuantity || 1}
+        enableExpiryTracking={enableExpiryTracking}
         onSelectBatches={handleSelectBatches}
         onClose={() => {
           const rowIndex = batchModalState?.rowIndex;
