@@ -43,6 +43,9 @@ async function main() {
   const { googleBackupRestoreService } = await import('../services/restore/googleBackupRestoreService');
   const { parseBackupFileText } = await import('../services/restore/localBackupFileService');
   const { privacyService } = await import('../services/privacyService');
+  const { getBusinessPreset, presetDashboardPreferences } = await import(
+    '../services/businessPresets'
+  );
 
   console.log('--- FILE RESTORE ---');
   const business = await businessRepository.createBusiness({
@@ -172,6 +175,43 @@ async function main() {
   check('legacy PIN migrated to sha256 on unlock', migrated.startsWith('sha256:'));
   check('migrated PIN still verifies', (await privacyService.verifyPin('4321')) === true);
   check('wrong PIN rejected after migration', (await privacyService.verifyPin('0000')) === false);
+
+  console.log('\n--- BUSINESS PRESETS ---');
+  const grocery = getBusinessPreset('Grocery / Supermarket');
+  check('grocery maps to Perishables with expiry ON', grocery.id === 'perishables' && grocery.enableExpiryTracking === true);
+  check('perishables blocks negative stock', grocery.allowNegativeStock === false);
+  const pharmacy = getBusinessPreset('Pharmacy / Medical');
+  check('pharmacy also maps to Perishables', pharmacy.id === 'perishables');
+  const services = getBusinessPreset('Services & Consulting');
+  check(
+    'services preset: expiry OFF, low-stock + near-expiry alerts OFF',
+    services.enableExpiryTracking === false &&
+      services.dashboard.showLowStock === false &&
+      services.dashboard.showNearExpiry === false
+  );
+  const restaurant = getBusinessPreset('Restaurant & Cafe');
+  check(
+    'restaurant preset: expiry ON + thermal printing',
+    restaurant.enableExpiryTracking === true && restaurant.defaultPrintFormat === 'THERMAL'
+  );
+  const workshop = getBusinessPreset('Manufacturing / Workshop');
+  check('workshop preset blocks negative stock', workshop.allowNegativeStock === false);
+  const fallback = getBusinessPreset('Something Unlisted');
+  check('unknown category falls back to General Retail', fallback.id === 'general-retail');
+  const servicesDash = presetDashboardPreferences(services);
+  check(
+    'preset dashboard prefs merge over defaults (other widgets stay ON)',
+    servicesDash.showLowStock === false && servicesDash.showRecentSales === true
+  );
+  const everyCategory = [
+    'Retail Store', 'Grocery / Supermarket', 'Wholesale Trader', 'Services & Consulting',
+    'Electronics & Hardware', 'Restaurant & Cafe', 'Pharmacy / Medical', 'Garments & Apparel',
+    'Manufacturing / Workshop', 'Other Business',
+  ];
+  check(
+    'every wizard category resolves to a preset with a summary',
+    everyCategory.every((c) => getBusinessPreset(c).summaryLines.length >= 3)
+  );
 
   console.log('\n================================================================');
   console.log(`RESULTS: ${passed} PASSED, ${failed} FAILED`);

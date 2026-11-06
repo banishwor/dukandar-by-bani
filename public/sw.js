@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dukandar-pwa-v6';
+const CACHE_NAME = 'dukandar-pwa-v7';
 
 // Dynamically compute the base path where this service worker is located (supports GitHub Pages subpaths!)
 const BASE_PATH = self.location.pathname.substring(

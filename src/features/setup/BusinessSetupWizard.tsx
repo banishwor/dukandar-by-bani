@@ -3,6 +3,8 @@ import { Store, Coins, CheckCircle, ArrowRight, ArrowLeft, Sparkles, Building2, 
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useBusiness } from '../../contexts/BusinessContext';
+import { getBusinessPreset, presetDashboardPreferences } from '../../services/businessPresets';
+import { dashboardPreferencesService } from '../../services/dashboardPreferencesService';
 import { motion, AnimatePresence } from 'motion/react';
 
 const CURRENCIES = [
@@ -63,6 +65,10 @@ export const BusinessSetupWizard: React.FC = () => {
     setCurrencySymbol(symbol);
   };
 
+  // The chosen category's starting preset. Only a starting point — every
+  // value below remains editable later in Settings.
+  const preset = getBusinessPreset(type);
+
   const handleCompleteSetup = async () => {
     try {
       setIsSubmitting(true);
@@ -74,10 +80,14 @@ export const BusinessSetupWizard: React.FC = () => {
         currencySymbol,
         financialYearStart,
         paymentTermsDays,
+        enableExpiryTracking: preset.enableExpiryTracking,
+        allowNegativeStock: preset.allowNegativeStock,
+        defaultPrintFormat: preset.defaultPrintFormat,
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
         address: address.trim() || undefined,
       });
+      dashboardPreferencesService.savePreferences(presetDashboardPreferences(preset));
     } catch (err) {
       console.error('Failed to setup business', err);
     } finally {
@@ -167,6 +177,17 @@ export const BusinessSetupWizard: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                  <div className="mt-2.5 p-3 rounded-xl bg-blue-500/10 border border-blue-500/25 text-xs leading-relaxed">
+                    <span className="font-bold text-blue-300">
+                      Starts as “{preset.label}”:
+                    </span>{' '}
+                    <span className="text-slate-300">{preset.summaryLines.join(' · ')}</span>
+                    <span className="block mt-1 text-slate-400">
+                      Just a starting point — you can change every one of these later in Settings,
+                      any time. For example, start as Services now and turn Expiry Tracking on later
+                      if you begin selling perishable items.
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
@@ -335,6 +356,18 @@ export const BusinessSetupWizard: React.FC = () => {
                 <div className="flex justify-between items-center text-sm pb-2 border-b border-slate-700/50">
                   <span className="text-slate-400">Currency</span>
                   <span className="font-bold text-blue-400">{currencySymbol} ({currencyCode})</span>
+                </div>
+                <div className="flex justify-between items-start gap-4 text-sm pb-2 border-b border-slate-700/50">
+                  <span className="text-slate-400 shrink-0">Starting preset</span>
+                  <span className="text-right">
+                    <span className="font-bold text-slate-200">{preset.label}</span>
+                    <span className="block text-xs text-slate-400 mt-0.5">
+                      {preset.summaryLines.join(' · ')}
+                    </span>
+                    <span className="block text-[11px] text-slate-500 mt-0.5">
+                      Changeable any time in Settings
+                    </span>
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-xs text-slate-400 pt-1">
                   <span className="flex items-center gap-1.5">
