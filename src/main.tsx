@@ -1,6 +1,11 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+// Self-hosted variable fonts (bundled + service-worker cached) — the app
+// makes no Google Fonts request, so first launch works fully offline.
+import '@fontsource-variable/plus-jakarta-sans';
+import '@fontsource-variable/plus-jakarta-sans/wght-italic.css';
+import '@fontsource-variable/jetbrains-mono';
 import './index.css';
 
 // Register Service Worker for offline capability & PWA installability.

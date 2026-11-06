@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useBusiness } from '../../contexts/BusinessContext';
 import { useToast } from '../../components/ui/Toast';
 import { Button } from '../../components/ui/Button';
@@ -27,7 +27,11 @@ import {
   File,
 } from 'lucide-react';
 import { db } from '../../db/database';
-import { DataIntegrityRunner } from './DataIntegrityRunner';
+// Lazy-loaded: the integrity runner pulls in the full test-suite service,
+// which should only download when a user actually opens Settings.
+const DataIntegrityRunner = lazy(() =>
+  import('./DataIntegrityRunner').then((m) => ({ default: m.DataIntegrityRunner }))
+);
 import { sampleDataService, type SampleDataSummary } from '../../services/sampleDataService';
 import { dashboardPreferencesService } from '../../services/dashboardPreferencesService';
 import type { DashboardPreferences, PrintFormat, PrintOptionMode } from '../../types';
@@ -667,7 +671,15 @@ export const SettingsView: React.FC = () => {
       </div>
 
       {/* Automated Data Integrity Verification Suite */}
-      <DataIntegrityRunner />
+      <Suspense
+        fallback={
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-6 text-xs font-semibold text-slate-500">
+            Loading integrity checks…
+          </div>
+        }
+      >
+        <DataIntegrityRunner />
+      </Suspense>
 
       {/* Danger Zone */}
       <div className="bg-white rounded-3xl border border-rose-200 shadow-xs p-6 space-y-4">

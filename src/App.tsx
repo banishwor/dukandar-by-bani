@@ -1,23 +1,93 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { BusinessProvider, useBusiness } from './contexts/BusinessContext';
 import { ToastProvider } from './components/ui/Toast';
 import { UpdatePrompt } from './components/ui/UpdatePrompt';
-import { BusinessSetupWizard } from './features/setup/BusinessSetupWizard';
 import { AppShell, type NavTab } from './components/layout/AppShell';
-import { DashboardView } from './features/dashboard/DashboardView';
-import { ItemsView } from './features/items/ItemsView';
-import { CustomersView } from './features/customers/CustomersView';
-import { SuppliersView } from './features/suppliers/SuppliersView';
-import { SalesView } from './features/sales/SalesView';
-import { NewSaleView } from './features/sales/NewSaleView';
-import { PurchasesView } from './features/purchases/PurchasesView';
-import { NewPurchaseView } from './features/purchases/NewPurchaseView';
-import { AccountsView } from './features/accounts/AccountsView';
-import { ExpensesView } from './features/expenses/ExpensesView';
-import { ReportsView } from './features/reports/ReportsView';
-import { SyncReadinessView } from './features/sync/SyncReadinessView';
-import { SettingsView } from './features/settings/SettingsView';
 import { Store, Loader2 } from 'lucide-react';
+
+// Views are code-split per tab: only the first screen (Dashboard for an
+// existing business, the setup wizard on first launch) downloads its code
+// up front; every other tab loads on demand and is cached by the service
+// worker for offline use after the first visit.
+const BusinessSetupWizard = lazy(() =>
+  import('./features/setup/BusinessSetupWizard').then((m) => ({ default: m.BusinessSetupWizard }))
+);
+const DashboardView = lazy(() =>
+  import('./features/dashboard/DashboardView').then((m) => ({ default: m.DashboardView }))
+);
+const ItemsView = lazy(() => import('./features/items/ItemsView').then((m) => ({ default: m.ItemsView })));
+const CustomersView = lazy(() =>
+  import('./features/customers/CustomersView').then((m) => ({ default: m.CustomersView }))
+);
+const SuppliersView = lazy(() =>
+  import('./features/suppliers/SuppliersView').then((m) => ({ default: m.SuppliersView }))
+);
+const SalesView = lazy(() => import('./features/sales/SalesView').then((m) => ({ default: m.SalesView })));
+const NewSaleView = lazy(() =>
+  import('./features/sales/NewSaleView').then((m) => ({ default: m.NewSaleView }))
+);
+const PurchasesView = lazy(() =>
+  import('./features/purchases/PurchasesView').then((m) => ({ default: m.PurchasesView }))
+);
+const NewPurchaseView = lazy(() =>
+  import('./features/purchases/NewPurchaseView').then((m) => ({ default: m.NewPurchaseView }))
+);
+const AccountsView = lazy(() =>
+  import('./features/accounts/AccountsView').then((m) => ({ default: m.AccountsView }))
+);
+const ExpensesView = lazy(() =>
+  import('./features/expenses/ExpensesView').then((m) => ({ default: m.ExpensesView }))
+);
+const ReportsView = lazy(() =>
+  import('./features/reports/ReportsView').then((m) => ({ default: m.ReportsView }))
+);
+const SyncReadinessView = lazy(() =>
+  import('./features/sync/SyncReadinessView').then((m) => ({ default: m.SyncReadinessView }))
+);
+const SettingsView = lazy(() =>
+  import('./features/settings/SettingsView').then((m) => ({ default: m.SettingsView }))
+);
+
+// Warm-up: after first paint, quietly download the remaining tab chunks in
+// the background so the service worker caches them and every tab still
+// works offline — exactly as it did with the old single bundle. Without
+// this, a tab opened for the first time while offline could not load.
+const warmUpLazyChunks = () => {
+  const loaders: Array<() => Promise<unknown>> = [
+    () => import('./features/setup/BusinessSetupWizard'),
+    () => import('./features/dashboard/DashboardView'),
+    () => import('./features/items/ItemsView'),
+    () => import('./features/customers/CustomersView'),
+    () => import('./features/suppliers/SuppliersView'),
+    () => import('./features/sales/SalesView'),
+    () => import('./features/sales/NewSaleView'),
+    () => import('./features/purchases/PurchasesView'),
+    () => import('./features/purchases/NewPurchaseView'),
+    () => import('./features/accounts/AccountsView'),
+    () => import('./features/expenses/ExpensesView'),
+    () => import('./features/reports/ReportsView'),
+    () => import('./features/sync/SyncReadinessView'),
+    () => import('./features/settings/SettingsView'),
+    () => import('./features/settings/DataIntegrityRunner'),
+  ];
+  void (async () => {
+    for (const load of loaders) {
+      try {
+        await load();
+      } catch {
+        // Offline or transient failure — the chunk is fetched again
+        // on demand when its tab is first opened online.
+      }
+    }
+  })();
+};
+
+const ViewLoading: React.FC = () => (
+  <div className="flex items-center justify-center gap-2 py-24 text-sm font-semibold text-slate-500">
+    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+    <span>Loading…</span>
+  </div>
+);
 
 const NAV_TABS: NavTab[] = [
   'DASHBOARD',
@@ -58,6 +128,20 @@ const MainAppContent: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Background-download the lazy tab chunks once the app is interactive.
+  useEffect(() => {
+    const w = window as typeof window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (typeof w.requestIdleCallback === 'function') {
+      const id = w.requestIdleCallback(warmUpLazyChunks, { timeout: 3000 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const timer = setTimeout(warmUpLazyChunks, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   const currentTabRef = useRef<NavTab>('DASHBOARD');
 
   useEffect(() => {
@@ -96,7 +180,11 @@ const MainAppContent: React.FC = () => {
 
   // If no business exists on first launch -> Onboarding Setup Wizard
   if (!business) {
-    return <BusinessSetupWizard />;
+    return (
+      <Suspense fallback={<ViewLoading />}>
+        <BusinessSetupWizard />
+      </Suspense>
+    );
   }
 
   const handleSaleCompleted = (saleId: string) => {
@@ -121,6 +209,7 @@ const MainAppContent: React.FC = () => {
 
   return (
     <AppShell currentTab={currentTab} onSelectTab={navigateToTab}>
+      <Suspense fallback={<ViewLoading />}>
       {currentTab === 'DASHBOARD' && (
         <DashboardView onNavigate={handleDashboardNavigate} />
       )}
@@ -177,6 +266,7 @@ const MainAppContent: React.FC = () => {
       {currentTab === 'SYNC' && <SyncReadinessView />}
 
       {currentTab === 'SETTINGS' && <SettingsView />}
+      </Suspense>
     </AppShell>
   );
 };
